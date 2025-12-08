@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from dependency import get_current_user
-from schemas.user import UserCreate
+from schemas.user import UserCreate, UserResponse
 from controller.auth_controller import authenticate_user, register_new_user
 from models.user import User
 from sqlalchemy.orm import Session
@@ -23,6 +23,6 @@ async def signup(user_create:UserCreate, db:Session=Depends(get_db)):
     return {"message": "User created successfully"}
 
 
-@router.post("/items",dependencies=[Depends(get_current_user)])
-async def read_items():
-    return {"token": "items"}
+@router.post("/me",response_model=UserResponse)
+async def read_me(user:Annotated[User,Depends(get_current_user)]):
+    return user
