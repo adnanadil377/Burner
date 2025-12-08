@@ -1,0 +1,51 @@
+# ----------------------------
+# Python
+# ----------------------------
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyo
+*.pdb
+
+# Virtual environment
+.env
+.venv/
+venv/
+ENV/
+env/
+
+# Installed packages
+site/
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Byte-compiled / optimized / DLL files
+*.pyc
+*.pyo
+*.pyd
+
+# ----------------------------
+# FastAPI / Uvicorn
+# ----------------------------
+# Uvicorn logs
+*.log
+
+# Reload cache
+.reload/
+
+# ----------------------------
+# Environment & Secrets
+# ----------------------------
+# dotenv files
+.env*
+!.env.example   # keep a template
+
+# ----------------------------
+# Misc
+# ----------------------------
+*.DS_Store
+*.sqlite3
+*.db
