@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ALGORITHM = settings.ALGORITHM
 SECRET = settings.SECRET_KEY
+REFRESH_SECRET_KEY = settings.REFRESH_KEY
 
 def get_hash_password(password: str):
     return pwd_context.hash(password)
@@ -24,6 +25,12 @@ def create_jwt_token(data:dict, expires_delta:int):
     encoded = jwt.encode(to_encode,SECRET,algorithm=ALGORITHM)
     return encoded
 
+def create_refresh_token(data:dict, expires_delta:int):
+    expires_delta = datetime.utcnow() + timedelta(days=expires_delta)
+    to_encode = {"exp": expires_delta, "user": str(data.user)}
+    # crucial: sign with the REFRESH_SECRET_KEY
+    encoded_jwt = jwt.encode(to_encode, REFRESH_SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
 def authenticate_user(email:str, password:str, db:Session):
     user = db.query(User).filter(User.email==email).first()
@@ -32,7 +39,8 @@ def authenticate_user(email:str, password:str, db:Session):
     if not verify_password(password,user.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
     token = create_jwt_token({"user":user.email},30)
-    return token
+    refresh = create_refresh_token({"user":user.email},7)
+    return {"access":token,"refresh":refresh}
 
 
 
