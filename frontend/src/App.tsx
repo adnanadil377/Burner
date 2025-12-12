@@ -1,8 +1,8 @@
-import { Navbar } from './components/Navbar';
-import { Hero } from './components/Hero';
-import { HowItWorks } from './components/HowItWorks';
-import { Comparison } from './components/Comparison';
-import { Pricing } from './components/Pricing';
+import { Navbar } from './components/LandingPage/Navbar';
+import { Hero } from './components/LandingPage/Hero';
+import { HowItWorks } from './components/LandingPage/HowItWorks';
+import { Comparison } from './components/LandingPage/Comparison';
+import { Pricing } from './components/LandingPage/Pricing';
 
 function App() {
   return (
