@@ -8,7 +8,9 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password:str
 
-class UserRead(UserBase):
+class UserResponse(UserBase):
     id: int
+    name:str
+    email:EmailStr
     class Config:
         from_attributes=True
