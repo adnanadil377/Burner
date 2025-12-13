@@ -1,14 +1,32 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuthStore } from "../../stores/useAuthStore";
+
+/**
+ * 🎓 ZUSTAND IN ACTION: Login Component
+ * 
+ * Notice how we replaced useState for auth with Zustand:
+ * - No more prop drilling needed
+ * - State persists across page refreshes
+ * - Other components can access auth state easily
+ */
 
 const API_URL = "http://127.0.0.1:8000";
 
 export default function Login() {
+  // Local form state (still use useState for form inputs)
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // ✨ ZUSTAND: Select only the state and actions we need
+  const { 
+    isAuthenticated, 
+    login, 
+    setLoading, 
+    setError, 
+    isLoading,
+    error: authError 
+  } = useAuthStore();
 
   const navigate = useNavigate();
 
@@ -20,27 +38,32 @@ export default function Login() {
     const token = params.get("token");
 
     if (token) {
-      localStorage.setItem("access_token", token);
-      setIsAuthenticated(true);
+      // ✨ ZUSTAND: Use the login action instead of setIsAuthenticated
+      login(token);
     }
-  }, []);
+  }, [login]);
 
   /* --------------------
      Redirect after login
   ---------------------*/
   useEffect(() => {
     if (isAuthenticated) {
-      navigate("/");
+      // Small delay to ensure state is persisted
+      const timer = setTimeout(() => {
+        navigate("/dashboard", { replace: true });
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [isAuthenticated, navigate]);
 
   /* --------------------
      Username / Password
   ---------------------*/
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // ✨ ZUSTAND: Use the store actions
     setLoading(true);
-    setError("");
+    setError(null);
 
     try {
       // Prepare form data for OAuth2PasswordRequestForm
@@ -61,16 +84,19 @@ export default function Login() {
       }
 
       const data = await res.json();
-      // Log the response for debugging
       console.log("Auth response:", data);
 
-      localStorage.setItem("access_token", data.access_token);
-      setIsAuthenticated(true);
+      // ✨ ZUSTAND: Use the login action to update global state
+      login(data.access_token);
     } catch (err) {
-      setError((err && typeof err === "object" && "message" in err) ? err.message : "Login failed");
-      // Log the error for debugging
+      // ✨ ZUSTAND: Use the setError action
+      const errorMessage = (err && typeof err === "object" && "message" in err) 
+        ? (err as Error).message 
+        : "Login failed";
+      setError(errorMessage);
       console.error("Auth error:", err);
     } finally {
+      // ✨ ZUSTAND: Update loading state
       setLoading(false);
     }
   };
@@ -78,7 +104,7 @@ export default function Login() {
   /* --------------------
      OAuth Login (Google)
   ---------------------*/
-  const handleOAuthLogin = (provider) => {
+  const handleOAuthLogin = (provider: string) => {
     window.location.href = `${API_URL}/auth/token/${provider}`;
   };
 
@@ -123,9 +149,9 @@ export default function Login() {
             <div className="flex-grow h-px bg-white/20" />
           </div>
 
-          {/* Error */}
-          {error && (
-            <p className="text-red-400 text-sm text-center">{error}</p>
+          {/* Error - now using Zustand state */}
+          {authError && (
+            <p className="text-red-400 text-sm text-center">{authError}</p>
           )}
 
           {/* Form */}
@@ -150,10 +176,10 @@ export default function Login() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={isLoading}
               className="w-full py-3 rounded-xl bg-blue-700 hover:bg-blue-600 transition font-medium disabled:opacity-60"
             >
-              {loading ? "Signing in..." : "Sign In"}
+              {isLoading ? "Signing in..." : "Sign In"}
             </button>
           </form>
 
