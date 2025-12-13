@@ -21,20 +21,20 @@ router = APIRouter()
 @router.get("/video-download", status_code=status.HTTP_200_OK, response_model=DownloadUrlResponse)
 def download_video(
     user: Annotated[User, Depends(get_current_user)], 
-    fileName: str
+    file_name: str
 ):
-    return create_presigned_download_url(user, fileName)
+    return create_presigned_download_url(user, file_name)
 
 @router.put("/video-upload", status_code=status.HTTP_202_ACCEPTED, response_model=PresignedUploadResponse)
 def upload_video(
     user: Annotated[User, Depends(get_current_user)], 
-    fileName: str, 
+    file_name: str, 
     content_type: str = Header(default="video/mp4", convert_underscores=False),
     db: Session = Depends(get_db)
 ):
     return initiate_video_upload(
         user=user, 
-        file_name=fileName, 
+        file_name=file_name, 
         db=db, 
         content_type=content_type
     )

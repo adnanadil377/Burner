@@ -30,13 +30,13 @@ def get_file_extension(filename: str) -> str:
         return filename.rsplit(".", 1)[1]
     return ""
 
-def create_presigned_download_url(user: User, fileName: str) -> dict:
+def create_presigned_download_url(user: User, file_name: str) -> dict:
     try:
         get_url = s3.generate_presigned_url(
             'get_object',
             Params={
                 'Bucket': R2_BUCKET_NAME, 
-                'Key': fileName
+                'Key': file_name
             },
             ExpiresIn=3600  # Valid for 1 hour
         )
