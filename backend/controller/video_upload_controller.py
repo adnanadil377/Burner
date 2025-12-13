@@ -25,10 +25,19 @@ def get_s3_client():
 
 s3 = get_s3_client()
 
+# Allowed video file extensions for security
+ALLOWED_VIDEO_EXTENSIONS = {
+    'mp4', 'mov', 'avi', 'webm', 'mkv', 'flv', 'wmv', 'mpeg', 'mpg', 'm4v', '3gp'
+}
+
 def get_file_extension(filename: str) -> str:
     if "." in filename:
-        return filename.rsplit(".", 1)[1]
+        return filename.rsplit(".", 1)[1].lower()
     return ""
+
+def is_valid_video_extension(extension: str) -> bool:
+    """Validate if the file extension is in the allowed video extensions list."""
+    return extension.lower() in ALLOWED_VIDEO_EXTENSIONS
 
 def create_presigned_download_url(user: User, fileName: str) -> dict:
     try:
@@ -50,10 +59,16 @@ def create_presigned_download_url(user: User, fileName: str) -> dict:
 def initiate_video_upload(user: User, file_name: str, db: Session, content_type: str = "video/mp4") -> dict:
     user_id = str(user.id) # Ensure ID is string
     print(file_name)
-    # Safer extension handling
+    # Validate file extension
     ext = get_file_extension(file_name)
     if not ext:
         raise HTTPException(status_code=400, detail="File must have an extension")
+    
+    if not is_valid_video_extension(ext):
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid file extension. Allowed video formats: {', '.join(sorted(ALLOWED_VIDEO_EXTENSIONS))}"
+        )
         
     unique_filename = f"{uuid.uuid4()}.{ext}"
     s3_key = f"{user_id}/{unique_filename}"
