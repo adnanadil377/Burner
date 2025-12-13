@@ -29,6 +29,7 @@ s3 = get_s3_client()
 ALLOWED_VIDEO_EXTENSIONS = {
     'mp4', 'mov', 'avi', 'webm', 'mkv', 'flv', 'wmv', 'mpeg', 'mpg', 'm4v', '3gp'
 }
+ALLOWED_FORMATS_MESSAGE = ', '.join(sorted(ALLOWED_VIDEO_EXTENSIONS))
 
 def get_file_extension(filename: str) -> str:
     if "." in filename:
@@ -37,7 +38,7 @@ def get_file_extension(filename: str) -> str:
 
 def is_valid_video_extension(extension: str) -> bool:
     """Validate if the file extension is in the allowed video extensions list."""
-    return extension.lower() in ALLOWED_VIDEO_EXTENSIONS
+    return extension in ALLOWED_VIDEO_EXTENSIONS
 
 def create_presigned_download_url(user: User, fileName: str) -> dict:
     try:
@@ -67,7 +68,7 @@ def initiate_video_upload(user: User, file_name: str, db: Session, content_type:
     if not is_valid_video_extension(ext):
         raise HTTPException(
             status_code=400, 
-            detail=f"Invalid file extension. Allowed video formats: {', '.join(sorted(ALLOWED_VIDEO_EXTENSIONS))}"
+            detail=f"Invalid file extension. Allowed video formats: {ALLOWED_FORMATS_MESSAGE}"
         )
         
     unique_filename = f"{uuid.uuid4()}.{ext}"
