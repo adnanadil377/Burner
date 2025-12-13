@@ -29,7 +29,7 @@ s3 = get_s3_client()
 ALLOWED_VIDEO_EXTENSIONS = {
     'mp4', 'mov', 'avi', 'webm', 'mkv', 'flv', 'wmv', 'mpeg', 'mpg', 'm4v', '3gp'
 }
-ALLOWED_FORMATS_MESSAGE = ', '.join(sorted(ALLOWED_VIDEO_EXTENSIONS))
+ALLOWED_FORMATS_MESSAGE = ', '.join(f'.{ext}' for ext in sorted(ALLOWED_VIDEO_EXTENSIONS))
 
 def get_file_extension(filename: str) -> str:
     if "." in filename:
@@ -37,7 +37,14 @@ def get_file_extension(filename: str) -> str:
     return ""
 
 def is_valid_video_extension(extension: str) -> bool:
-    """Validate if the file extension is in the allowed video extensions list."""
+    """Validate if the file extension is in the allowed video extensions list.
+    
+    Args:
+        extension: File extension in lowercase (without the dot)
+    
+    Returns:
+        True if the extension is allowed, False otherwise
+    """
     return extension in ALLOWED_VIDEO_EXTENSIONS
 
 def create_presigned_download_url(user: User, fileName: str) -> dict:
