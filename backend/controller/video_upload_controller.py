@@ -78,7 +78,7 @@ def create_presigned_download_url(user: User, file_name: str, db: Session) -> di
         logger.error(f"Failed to generate download URL for user {user.id}, file {file_name}: [{error_type}] {error_msg}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail=f"Could not generate download link: [{error_type}] {error_msg}"
+            detail="Could not generate download link. Please try again later."
         )
 
 def initiate_video_upload(user: User, file_name: str, db: Session, content_type: str = "video/mp4") -> dict:
@@ -134,7 +134,7 @@ def initiate_video_upload(user: User, file_name: str, db: Session, content_type:
         logger.error(f"Failed to generate UPLOAD URL for user {user.id}: {error_code} - {error_message}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail=f"Could not generate upload link: {error_code} - {error_message}"
+            detail="Could not generate upload link. Please try again later."
         )
     except Exception as e:
         # Rollback database changes for any other errors
