@@ -20,9 +20,5 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-<<<<<<< HEAD
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(video_upload.router, prefix="/upload", tags=["upload"])
-=======
-app.include_router(auth.router, prefix="/auth", tags=["auth"])
->>>>>>> a15f05edca7079b8a86e9a3b69a8d73ab75641d2
