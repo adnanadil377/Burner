@@ -40,8 +40,6 @@ dist/
 # Environment & Secrets
 # ----------------------------
 # dotenv files
-.env*
-!.env.example   # keep a template
 
 # ----------------------------
 # Misc
