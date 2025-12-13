@@ -91,19 +91,7 @@ def initiate_video_upload(user: User, file_name: str, db: Session, content_type:
     s3_key = f"{user_id}/{unique_filename}"
 
     try:
-        # Create DB record with PENDING status first
-        new_video = Video(
-            user_id=user.id,
-            s3_key=s3_key, 
-            bucket=R2_BUCKET_NAME, 
-            original_name=file_name, 
-            status="PENDING"
-        )
-        db.add(new_video)
-        db.commit()
-        db.refresh(new_video)
-        
-        # Generate presigned URL
+        # Generate presigned URL first
         put_url = s3.generate_presigned_url(
             'put_object',
             Params={
@@ -117,6 +105,18 @@ def initiate_video_upload(user: User, file_name: str, db: Session, content_type:
             ExpiresIn=PRESIGNED_URL_EXPIRATION
         )
         
+        # Create DB record with PENDING status only after URL generation succeeds
+        new_video = Video(
+            user_id=user.id,
+            s3_key=s3_key, 
+            bucket=R2_BUCKET_NAME, 
+            original_name=file_name, 
+            status="PENDING"
+        )
+        db.add(new_video)
+        db.commit()
+        db.refresh(new_video)
+        
         return {
             "upload_url": put_url, 
             "file_key": s3_key,
@@ -124,10 +124,13 @@ def initiate_video_upload(user: User, file_name: str, db: Session, content_type:
         }
 
     except ClientError as e:
-        # Rollback database changes if presigned URL generation fails
+        # Rollback any database changes
         db.rollback()
-        error_code = getattr(e, "response", {}).get("Error", {}).get("Code", "Unknown")
-        error_message = getattr(e, "response", {}).get("Error", {}).get("Message", str(e))
+        error_code = "Unknown"
+        error_message = str(e)
+        if hasattr(e, "response"):
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            error_message = e.response.get("Error", {}).get("Message", str(e))
         logger.error(f"Failed to generate UPLOAD URL for user {user.id}: {error_code} - {error_message}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
