@@ -43,15 +43,17 @@ export default function Login() {
     setError("");
 
     try {
+      // Prepare form data for OAuth2PasswordRequestForm
+      const formData = new URLSearchParams();
+      formData.append("username", username);
+      formData.append("password", password);
+
       const res = await fetch(`${API_URL}/auth/token`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: JSON.stringify({
-          username,
-          password,
-        }),
+        body: formData.toString(),
       });
 
       if (!res.ok) {
