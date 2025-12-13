@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     R2_ACCOUNT_ID: str
     R2_ACCESS_KEY: str
     R2_SECRET_KEY: str
+    R2_BUCKET_NAME: str = "burner-video"
     class Config:
         env_file = ".env"
 
