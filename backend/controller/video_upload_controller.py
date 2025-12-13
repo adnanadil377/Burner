@@ -115,8 +115,8 @@ def initiate_video_upload(user: User, file_name: str, db: Session, content_type:
     
     s3_client = get_s3_client()
     
+    # First, generate presigned URL
     try:
-        # Generate presigned URL
         put_url = s3_client.generate_presigned_url(
             'put_object',
             Params={
@@ -129,8 +129,17 @@ def initiate_video_upload(user: User, file_name: str, db: Session, content_type:
             },
             ExpiresIn=PRESIGNED_URL_EXPIRATION
         )
-        
-        # Create DB record with PENDING status
+    except ClientError as e:
+        error_code = getattr(e, "response", {}).get("Error", {}).get("Code", "Unknown")
+        error_message = getattr(e, "response", {}).get("Error", {}).get("Message", str(e))
+        logger.error(f"Failed to generate upload URL for user {user.id}: {error_code} - {error_message}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Could not generate upload link: {error_code} - {error_message}"
+        )
+    
+    # If URL generation succeeded, create DB record
+    try:
         new_video = Video(
             user_id=user.id,
             s3_key=s3_key, 
@@ -147,24 +156,13 @@ def initiate_video_upload(user: User, file_name: str, db: Session, content_type:
             "file_key": s3_key,
             "video_id": new_video.id
         }
-        
-    except ClientError as e:
-        # Rollback database changes if they occurred
-        db.rollback()
-        error_code = getattr(e, "response", {}).get("Error", {}).get("Code", "Unknown")
-        error_message = getattr(e, "response", {}).get("Error", {}).get("Message", str(e))
-        logger.error(f"Failed to generate upload URL for user {user.id}: {error_code} - {error_message}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail=f"Could not generate upload link: {error_code} - {error_message}"
-        )
     except Exception as e:
         # Rollback database changes on any error
         db.rollback()
-        logger.error(f"Unexpected error during upload initiation for user {user.id}: {str(e)}")
+        logger.error(f"Database error during upload initiation for user {user.id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not initiate upload"
+            detail="Could not create video record"
         )
 
 def confirm_upload(db: Session, video_id: int, user: User) -> dict:
