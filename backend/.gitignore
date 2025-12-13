@@ -36,6 +36,10 @@ dist/
 # Reload cache
 .reload/
 
+# ----------------------------
+# Environment & Secrets
+# ----------------------------
+# dotenv files
 
 # ----------------------------
 # Misc
