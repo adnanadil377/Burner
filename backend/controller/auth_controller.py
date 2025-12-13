@@ -26,9 +26,10 @@ def create_jwt_token(data:dict, expires_delta:int):
     return encoded
 
 def create_refresh_token(data:dict, expires_delta:int):
-    expires_delta = datetime.utcnow() + timedelta(days=expires_delta)
-    to_encode = {"exp": expires_delta, "user": str(data.user)}
-    # crucial: sign with the REFRESH_SECRET_KEY
+    to_encode = data.copy()
+    expire = datetime.now(UTC) + timedelta(days=expires_delta)
+    to_encode["exp"] = expire
+    # Use dictionary access, not object attribute
     encoded_jwt = jwt.encode(to_encode, REFRESH_SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -40,7 +41,7 @@ def authenticate_user(email:str, password:str, db:Session):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
     token = create_jwt_token({"user":user.email},30)
     refresh = create_refresh_token({"user":user.email},7)
-    return {"access":token,"refresh":refresh}
+    return token  # Return just the token string, not a dict
 
 
 
