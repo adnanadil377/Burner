@@ -1,5 +1,5 @@
-from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, status, Header
+from typing import Annotated
+from fastapi import APIRouter, Depends, status
 
 from db.session import get_db
 from controller.video_upload_controller import (
@@ -21,20 +21,21 @@ router = APIRouter()
 @router.get("/video-download", status_code=status.HTTP_200_OK, response_model=DownloadUrlResponse)
 def download_video(
     user: Annotated[User, Depends(get_current_user)], 
-    fileName: str
+    file_name: str,
+    db: Session = Depends(get_db)
 ):
-    return create_presigned_download_url(user, fileName)
+    return create_presigned_download_url(user, file_name, db)
 
-@router.put("/video-upload", status_code=status.HTTP_202_ACCEPTED, response_model=PresignedUploadResponse)
+@router.post("/video-upload", status_code=status.HTTP_202_ACCEPTED, response_model=PresignedUploadResponse)
 def upload_video(
     user: Annotated[User, Depends(get_current_user)], 
-    fileName: str, 
-    content_type: str = Header(default="video/mp4", convert_underscores=False),
+    file_name: str,
+    content_type: str = "video/mp4",
     db: Session = Depends(get_db)
 ):
     return initiate_video_upload(
         user=user, 
-        file_name=fileName, 
+        file_name=file_name, 
         db=db, 
         content_type=content_type
     )
