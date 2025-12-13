@@ -36,12 +36,6 @@ dist/
 # Reload cache
 .reload/
 
-# ----------------------------
-# Environment & Secrets
-# ----------------------------
-# dotenv files
-.env*
-!.env.example   # keep a template
 
 # ----------------------------
 # Misc
