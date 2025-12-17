@@ -4,10 +4,11 @@ import { useAuthStore } from '../stores/useAuthStore';
 
 import MainLayout from '../layout/MainLayout';
 import AuthLayout from '../layout/AuthLayout';
+import DashboardLayout from '../layout/DashboardLayout';
 import Landing from '../pages/Landing';
 import Login from '../pages/Login';
 import OAuthCallback from '../pages/Login/OAuthCallback';
-import Dashboard from '../pages/Dashboard';
+import { DashboardOverview, EditorPage, LibraryPage, ProjectsPage, SettingsPage } from '../pages';
 
 /**
  * 🎓 ZUSTAND IN ROUTING: PrivateRoute Component
@@ -47,12 +48,19 @@ export default function AppRoutes() {
         <Route path="/login" element={<Login />} />
         <Route path="/oauth/callback" element={<OAuthCallback />} />
       </Route>
-      {/* Protected dashboard route - No layout needed as Dashboard has its own styling */}
-      <Route path="/dashboard" element={
+      
+      {/* Protected dashboard routes with sidebar */}
+      <Route element={
         <PrivateRoute>
-          <Dashboard />
+          <DashboardLayout />
         </PrivateRoute>
-      } />
+      }>
+        <Route path="/dashboard" element={<DashboardOverview />} />
+        <Route path="/editor" element={<EditorPage />} />
+        <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/library" element={<LibraryPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+      </Route>
     </Routes>
   );
 }

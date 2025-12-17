@@ -17,9 +17,9 @@ interface UploadedFile {
 }
 
 interface PresignedUrlResponse {
-  uploadUrl: string;
-  fileId: string;
-  publicUrl: string;
+  upload_url: string;
+  file_key: string;
+  video_id: number;
 }
 
 /**
@@ -45,28 +45,27 @@ export const FileUpload = () => {
    * Step 1: Request presigned URL from your API
    */
   const requestPresignedUrl = async (fileName: string, fileType: string): Promise<PresignedUrlResponse> => {
-    const response = await fetch('/api/upload/request', {
-      method: 'POST',
+    const response = await fetch(`http://127.0.0.1:8000/video/video-upload?fileName=${fileName}`, {
+      method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
+        'content-type': fileType,
         'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        fileName,
-        fileType,
-      }),
     });
 
     if (!response.ok) {
       throw new Error('Failed to get upload URL');
     }
 
-    return response.json();
+    const data = await response.json();
+    console.log("Presigned URL response:", data);
+    return data;
   };
   /**
    * Step 2: Upload directly to Cloudflare R2
    */
-  const uploadToR2 = async (file: File, uploadUrl: string): Promise<void> => {
+  const uploadToR2 = async (file: File, uploadUrl: string, fileName: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
 
@@ -94,6 +93,7 @@ export const FileUpload = () => {
       // Send the file
       xhr.open('PUT', uploadUrl);
       xhr.setRequestHeader('Content-Type', file.type);
+      xhr.setRequestHeader('x-amz-meta-original-name', fileName);
       xhr.send(file);
     });
   };
@@ -114,14 +114,14 @@ export const FileUpload = () => {
       });
 
       // STEP 1: Request presigned URL
-      const { uploadUrl, fileId, publicUrl } = await requestPresignedUrl(
+      const { upload_url, file_key, video_id } = await requestPresignedUrl(
         file.name,
         file.type
       );
 
       // STEP 2: Upload to R2
       setUploadState(prev => ({ ...prev, status: 'uploading' }));
-      await uploadToR2(file, uploadUrl);
+      await uploadToR2(file, upload_url, file.name);
 // --- NEW STEP 3: Tell Backend to start processing ---
       // This creates the DB row and kicks off the Celery Worker
       const projectResponse = await fetch('/api/v1/projects/create', {
@@ -131,7 +131,7 @@ export const FileUpload = () => {
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          r2_key: fileId, // The key you got from Step 1
+          r2_key: file_key, // The key you got from Step 1
           original_filename: file.name
         })
       });
@@ -144,10 +144,10 @@ export const FileUpload = () => {
         progress: 100,
         error: null,
         uploadedFile: {
-          id: fileId,
+          id: video_id.toString(),
           name: file.name,
           size: file.size,
-          url: publicUrl,
+          url: upload_url,
           uploadedAt: new Date(),
         },
       });
