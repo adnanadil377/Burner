@@ -18,7 +18,7 @@ from schemas.video import (
 
 router = APIRouter()
 
-@router.get("/video-download", status_code=status.HTTP_200_OK, response_model=DownloadUrlResponse)
+@router.get("/download", status_code=status.HTTP_200_OK, response_model=DownloadUrlResponse)
 def download_video(
     user: Annotated[User, Depends(get_current_user)],
     file_name: str,
@@ -27,7 +27,7 @@ def download_video(
     """Generate a presigned download URL for a video file."""
     return create_presigned_download_url(user, file_name, db)
 
-@router.post("/video-upload", status_code=status.HTTP_202_ACCEPTED, response_model=PresignedUploadResponse)
+@router.post("/upload", status_code=status.HTTP_202_ACCEPTED, response_model=PresignedUploadResponse)
 def upload_video(
     user: Annotated[User, Depends(get_current_user)],
     file_name: str,
