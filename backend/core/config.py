@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     R2_ACCESS_KEY: str
     R2_SECRET_KEY: str
     R2_BUCKET_NAME: str = "burner-video"
+    PRESIGNED_URL_EXPIRATION: int = 3600  # 1 hour in seconds
+    
     class Config:
         env_file = ".env"
 
