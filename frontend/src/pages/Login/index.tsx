@@ -110,30 +110,50 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen bg-black text-white">
-      {/* Left image */}
-      <div className="hidden md:flex w-1/2 relative">
-        <img
-          src="./login-bg.webp"
-          alt="Login"
-          className="absolute inset-0 w-full h-full object-cover opacity-70"
-        />
+      {/* Left Panel - Video Preview */}
+      <div className="hidden md:flex w-1/2 items-center justify-center p-12">
+        <div className="w-full max-w-md space-y-8">
+          {/* Video Preview Card */}
+          <div className="relative bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl aspect-[3/4] flex items-center justify-center overflow-hidden shadow-2xl">
+            {/* Play Button */}
+            <button className="w-20 h-20 bg-gray-600/80 hover:bg-gray-600 rounded-full flex items-center justify-center transition-all duration-300 backdrop-blur-sm">
+              <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </button>
+            
+            {/* Optional: Video thumbnail overlay */}
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-blue-500/5"></div>
+          </div>
+
+          {/* Caption Text */}
+          <div className="text-center space-y-3">
+            <h2 className="text-3xl font-bold text-gray-900">
+              Captions that Captivate
+            </h2>
+            <p className="text-gray-600 text-base">
+              Join thousands of creators making their content stand out.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Right panel */}
-      <div className="w-full md:w-1/2 flex items-center justify-center p-6">
-        <div className="w-full max-w-md p-8 rounded-2xl bg-white/5 backdrop-blur border border-white/10 shadow-xl space-y-6">
+      <div className="w-full md:w-1/2 flex items-center justify-center p-6 bg-black">
+        <div className="w-full max-w-md space-y-6">
 
-          <h1 className="text-3xl font-bold text-center">🌀 SuperMail</h1>
+          <h1 className="text-3xl font-bold text-left text-gray-100">🔥 Caption Burn</h1>
+          <h1 className="text-4xl font-extrabold text-left text-gray-100">Welcome Back</h1>
 
-          <p className="text-center text-gray-400">
-            Sign in to your account
+          <p className="text-left text-gray-200">
+            Add stunning captions to your videos in minutes.
           </p>
 
           {/* OAuth */}
           <button
             type="button"
             onClick={() => handleOAuthLogin("google")}
-            className="w-full flex items-center justify-center gap-3 py-3 rounded-xl bg-white text-black font-semibold hover:scale-[1.02] transition"
+            className="w-full flex items-center justify-center gap-3 py-3 rounded-xl bg-white text-gray-900 font-semibold hover:bg-gray-50 transition border border-gray-300"
           >
             <img
               src="https://www.svgrepo.com/show/475656/google-color.svg"
@@ -144,14 +164,14 @@ export default function Login() {
           </button>
 
           <div className="flex items-center gap-3">
-            <div className="flex-grow h-px bg-white/20" />
-            <span className="text-xs text-gray-400">OR</span>
-            <div className="flex-grow h-px bg-white/20" />
+            <div className="flex-grow h-px bg-gray-500" />
+            <span className="text-xs text-gray-300">OR</span>
+            <div className="flex-grow h-px bg-gray-500" />
           </div>
 
           {/* Error - now using Zustand state */}
           {authError && (
-            <p className="text-red-400 text-sm text-center">{authError}</p>
+            <p className="text-red-500 text-sm text-center">{authError}</p>
           )}
 
           {/* Form */}
@@ -159,7 +179,7 @@ export default function Login() {
             <input
               type="text"
               placeholder="Username"
-              className="w-full px-4 py-3 rounded-xl bg-black border border-gray-700 focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full px-4 py-3 rounded-xl bg-[#15132c] border border-gray-800 focus:ring-2 focus:ring-gray-500 focus:border-transparent outline-none text-gray-100"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
@@ -168,7 +188,7 @@ export default function Login() {
             <input
               type="password"
               placeholder="Password"
-              className="w-full px-4 py-3 rounded-xl bg-black border border-gray-700 focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full px-4 py-3 rounded-xl bg-[#15132c] border border-gray-800 focus:ring-2 focus:ring-gray-500 focus:border-transparent outline-none text-gray-100"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -177,19 +197,19 @@ export default function Login() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 rounded-xl bg-blue-700 hover:bg-blue-600 transition font-medium disabled:opacity-60"
+              className="w-full py-3 rounded-xl bg-[#211e50] hover:bg-[#1a1845] transition font-semibold text-white disabled:opacity-60"
             >
-              {isLoading ? "Signing in..." : "Sign In"}
+              {isLoading ? "Signing in..." : "Log In"}
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-400">
-            Don’t have an account?{" "}
+          <p className="text-center text-sm text-gray-300">
+            Don't have an account?{" "}
             <span
-              className="text-blue-400 cursor-pointer hover:underline"
+              className="text-blue-600 cursor-pointer hover:underline font-medium"
               onClick={() => navigate("/signup")}
             >
-              Sign up
+              Sign Up
             </span>
           </p>
         </div>
