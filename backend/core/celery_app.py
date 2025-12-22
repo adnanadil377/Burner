@@ -1,11 +1,11 @@
 from celery import Celery
 from .config import settings
 
-REDIS_URL=settings.REDIS_URL
+redis_url = settings.REDIS_URL
 celery_app = Celery(
     "burner_worker",
-    broker=REDIS_URL,
-    backend=REDIS_URL
+    broker=redis_url,
+    backend=redis_url
 )
 # Optional: Configure Celery to look for tasks in a specific module
 celery_app.conf.imports = ["tasks.video_tasks"]

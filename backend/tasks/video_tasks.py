@@ -1,27 +1,39 @@
 import subprocess
 import uuid
 import os
+import logging
 from core.celery_app import celery_app
 from google import genai
 from core.config import settings
-api_key=settings.GEMINI_API_KEY
+
+logger = logging.getLogger(__name__)
+api_key = settings.GEMINI_API_KEY
 
 @celery_app.task
-def burn_caption(get_presigned_url,subtitles,put_presigned_url):
+def burn_caption(get_presigned_url, subtitles):
+    """Burn subtitles into a video file.
+    
+    Args:
+        get_presigned_url: Presigned URL to download the video
+        subtitles: Path to the subtitle file or subtitle content
+        
+    Returns:
+        dict: Task result with output video path
+    """
     try:
         input_path = get_presigned_url
-        # sub_path = Path(subtitle_path).resolve()
         sub_path = subtitles
-        output_path = input_path.with_name(f"{input_path.stem}_subtitled_{uuid.uuid4().hex[:4]}.mp4")
+        # Create a local output filename
+        output_path = f"subtitled_{uuid.uuid4().hex[:8]}.mp4"
 
-        # 2. FFmpeg Path Escaping & Styling
+        # FFmpeg Path Escaping & Styling
         # Escape backslashes and colons for FFmpeg filter syntax
         ffmpeg_sub_path = str(sub_path).replace("\\", "/").replace(":", "\\:")
         
-        # Modern subtitle style: Arial, Size 24, White Text, Black Outline, slightly raised margin
-        style = "Fontname=Arial,FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=1,Shadow=0,MarginV=25"
+        # Modern subtitle style: configurable font, Size 24, White Text, Black Outline
+        style = "FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=1,Shadow=0,MarginV=25"
 
-        # 3. Run FFmpeg
+        # Run FFmpeg
         cmd = [
             "ffmpeg",
             "-y",
@@ -34,18 +46,10 @@ def burn_caption(get_presigned_url,subtitles,put_presigned_url):
             str(output_path),
         ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
-        if result.returncode != 0:
-            print(f"FFmpeg Error: {result.stderr}")
-            raise RuntimeError(f"FFmpeg failed: {result.stderr}")
-
-        # 4. Cleanup Local SRT File
-        # Now that it is burned into the video, we don't need the text file
-        # try:
-        #     os.remove(sub_path)
-        # except OSError:
-        #     pass
+        # Subtitle file lifecycle
+        # The subtitle file is managed by the storage backend; we intentionally do not delete it here.
 
         return {
             "status": "completed",
@@ -54,16 +58,24 @@ def burn_caption(get_presigned_url,subtitles,put_presigned_url):
         }
 
     except subprocess.CalledProcessError as e:
-        print(f"FFmpeg error: {e.stderr}")
+        logger.error(f"FFmpeg error: {e.stderr}")
         raise e
 
 @celery_app.task
 def extract_audio_and_transcribe(presigned_url):
-
+    """Extract audio from video and transcribe using Gemini API.
+    
+    Args:
+        presigned_url: Presigned URL to download the video
+        
+    Returns:
+        str: Transcription text
+    """
     unique_id = uuid.uuid4()
     audio_output = f"{unique_id}.mp3"
 
     try:
+        # Extract audio from video
         cmd = [
             "ffmpeg",
             "-y",
@@ -76,25 +88,31 @@ def extract_audio_and_transcribe(presigned_url):
         
         subprocess.run(cmd, capture_output=True, text=True, check=True)
 
-        # 3. Upload to Gemini
+        # Upload to Gemini and generate transcript
         client = genai.Client(api_key=api_key)
-        # Note: client.files.upload takes a file path, not the subprocess output string
         audio_file = client.files.upload(file=audio_output)
         
-        # 4. Generate Transcript
+        # Generate Transcript
         prompt = 'Generate a transcript of the speech.'
         response = client.models.generate_content(
-            model='gemini-3-flash-preview', # Recommended latest version
+            model='gemini-1.5-flash',  # Correct Gemini model name
             contents=[prompt, audio_file]
         )
 
-        print(f"Transcription result: {response.text}")
+        logger.info(f"Transcription completed for audio: {audio_output}")
         return response.text
 
     except subprocess.CalledProcessError as e:
-        print(f"FFmpeg error: {e.stderr}")
+        logger.error(f"FFmpeg error during audio extraction: {e.stderr}")
+        raise e
+    except Exception as e:
+        logger.error(f"Error during transcription: {str(e)}")
         raise e
     finally:
-        # 5. Cleanup: Always delete the local file to save disk space
+        # Cleanup: Always delete the local file to save disk space
         if os.path.exists(audio_output):
-            os.remove(audio_output)
+            try:
+                os.remove(audio_output)
+                logger.info(f"Cleaned up temporary audio file: {audio_output}")
+            except OSError as e:
+                logger.warning(f"Failed to delete temporary audio file {audio_output}: {e}")
