@@ -58,7 +58,7 @@ def burn_caption(get_presigned_url, subtitles):
         }
 
     except subprocess.CalledProcessError as e:
-        logger.error(f"FFmpeg error: {e.stderr if e.stderr else e.stdout}")
+        logger.error(f"FFmpeg error: {e.stderr or e.stdout or 'Unknown error'}")
         raise e
 
 @celery_app.task
@@ -103,7 +103,7 @@ def extract_audio_and_transcribe(presigned_url):
         return response.text
 
     except subprocess.CalledProcessError as e:
-        logger.error(f"FFmpeg error during audio extraction: {e.stderr if e.stderr else e.stdout}")
+        logger.error(f"FFmpeg error during audio extraction: {e.stderr or e.stdout or 'Unknown error'}")
         raise e
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
