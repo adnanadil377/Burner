@@ -95,7 +95,7 @@ def extract_audio_and_transcribe(presigned_url):
         # Generate Transcript
         prompt = 'Generate a transcript of the speech.'
         response = client.models.generate_content(
-            model='gemini-1.5-flash',  # Correct Gemini model name
+            model=settings.GEMINI_MODEL,  # Configurable Gemini model
             contents=[prompt, audio_file]
         )
 
