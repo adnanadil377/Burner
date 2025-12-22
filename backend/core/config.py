@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     REDIS_URL: str
     GEMINI_API_KEY: str
+    GEMINI_MODEL: str = "gemini-1.5-flash"  # Default Gemini model
     PRESIGNED_URL_EXPIRATION: int = 3600  # 1 hour in seconds
     
     class Config:
