@@ -53,7 +53,7 @@ def register_new_user(user_data: UserCreate,db: Session):
 
     hashed_pwd = get_hash_password(user_data.password)
     new_user_email = user_data.email.lower()
-    new_user=User(name= user_data.name, email=new_user_email, password=hashed_pwd)
+    new_user = User(name=user_data.name, email=new_user_email, password=hashed_pwd)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
