@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     REDIS_URL: str
     GEMINI_API_KEY: str
+    PRESIGNED_URL_EXPIRATION: int = 3600  # 1 hour in seconds
+    
     class Config:
         env_file = ".env"
 

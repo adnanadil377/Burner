@@ -1,5 +1,5 @@
-from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, status, Header
+from typing import Annotated
+from fastapi import APIRouter, Depends, status
 
 from models.video import Video
 from db.session import get_db
@@ -20,25 +20,26 @@ from schemas.video import (
 
 router = APIRouter()
 
-@router.get("/video-download", status_code=status.HTTP_200_OK, response_model=DownloadUrlResponse)
+@router.get("/download", status_code=status.HTTP_200_OK, response_model=DownloadUrlResponse)
 def download_video(
-    user: Annotated[User, Depends(get_current_user)], 
-    video_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    file_name: str,
     db: Session = Depends(get_db)
 ):
-    s3_key=db.query(Video).filter(Video.id==video_id).first()
-    return create_presigned_download_url(user, s3_key)
+    """Generate a presigned download URL for a video file."""
+    return create_presigned_download_url(user, file_name, db)
 
-@router.put("/video-upload", status_code=status.HTTP_202_ACCEPTED, response_model=PresignedUploadResponse)
+@router.post("/upload", status_code=status.HTTP_202_ACCEPTED, response_model=PresignedUploadResponse)
 def upload_video(
-    user: Annotated[User, Depends(get_current_user)], 
-    fileName: str, 
-    content_type: str = Header(default="video/mp4", convert_underscores=False),
+    user: Annotated[User, Depends(get_current_user)],
+    file_name: str,
+    content_type: str = "video/mp4",
     db: Session = Depends(get_db)
 ):
+    """Initiate a video upload by generating a presigned upload URL."""
     return initiate_video_upload(
         user=user, 
-        file_name=fileName, 
+        file_name=file_name, 
         db=db, 
         content_type=content_type
     )
@@ -49,6 +50,7 @@ def upload_success(
     user: Annotated[User, Depends(get_current_user)], 
     db: Session = Depends(get_db)
 ):
+    """Confirm that a video upload is complete."""
     return confirm_upload(db=db, video_id=video_id, user=user)
 
 
