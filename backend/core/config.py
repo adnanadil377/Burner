@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     R2_ACCESS_KEY: str
     R2_SECRET_KEY: str
     R2_BUCKET_NAME: str = "burner-video"
+
+    REDIS_URL: str
+    GEMINI_API_KEY: str
+    GEMINI_MODEL: str = "gemini-3-flash-preview"  # Default Gemini model
     PRESIGNED_URL_EXPIRATION: int = 3600  # 1 hour in seconds
     
     class Config:
