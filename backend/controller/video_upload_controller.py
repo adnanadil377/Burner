@@ -1,5 +1,6 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from tasks.video_tasks import extract_audio_and_transcribe
 from models.video import Video
 from models.user import User
 import boto3
@@ -30,13 +31,13 @@ def get_file_extension(filename: str) -> str:
         return filename.rsplit(".", 1)[1]
     return ""
 
-def create_presigned_download_url(user: User, fileName: str) -> dict:
+def create_presigned_download_url(user: User, s3_key: str) -> dict:
     try:
         get_url = s3.generate_presigned_url(
             'get_object',
             Params={
                 'Bucket': R2_BUCKET_NAME, 
-                'Key': fileName
+                'Key': s3_key
             },
             ExpiresIn=3600  # Valid for 1 hour
         )
@@ -97,6 +98,7 @@ def initiate_video_upload(user: User, file_name: str, db: Session, content_type:
         "video_id": new_video.id
     }
 
+
 def confirm_upload(db: Session, video_id: int, user: User) -> dict:
     video = db.query(Video).filter(Video.id == video_id, Video.user_id == user.id).first()
     if not video:
@@ -115,3 +117,8 @@ def confirm_upload(db: Session, video_id: int, user: User) -> dict:
     db.commit()
     db.refresh(video)
     return {"message": "Upload verified and completed", "video": video}
+
+
+def call_celery_audio(user:User, s3_key:str):
+    presigned_url = create_presigned_download_url(user, s3_key)
+    extract_audio_and_transcribe.delay(presigned_url["download_url"])

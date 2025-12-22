@@ -1,8 +1,10 @@
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, status, Header
 
+from models.video import Video
 from db.session import get_db
 from controller.video_upload_controller import (
+    call_celery_audio,
     create_presigned_download_url, 
     initiate_video_upload, 
     confirm_upload
@@ -21,9 +23,11 @@ router = APIRouter()
 @router.get("/video-download", status_code=status.HTTP_200_OK, response_model=DownloadUrlResponse)
 def download_video(
     user: Annotated[User, Depends(get_current_user)], 
-    fileName: str
+    video_id: int,
+    db: Session = Depends(get_db)
 ):
-    return create_presigned_download_url(user, fileName)
+    s3_key=db.query(Video).filter(Video.id==video_id).first()
+    return create_presigned_download_url(user, s3_key)
 
 @router.put("/video-upload", status_code=status.HTTP_202_ACCEPTED, response_model=PresignedUploadResponse)
 def upload_video(
@@ -46,3 +50,23 @@ def upload_success(
     db: Session = Depends(get_db)
 ):
     return confirm_upload(db=db, video_id=video_id, user=user)
+
+
+@router.get("/get_user_videos")
+def get_user_video(
+    user:Annotated[User, Depends(get_current_user)], 
+    db: Session = Depends(get_db)
+):
+    all_videos = db.query(Video).filter(Video.user_id == User.id).all()
+    return {"all_video":[all_videos]}
+
+
+
+@router.post("/transcribe")
+def trascribe(
+    video_id:int, 
+    user:Annotated[User, Depends(get_current_user)], 
+    db: Session = Depends(get_db)
+):
+    s3_key=db.query(Video).filter(Video.id==video_id).first()
+    return call_celery_audio(user,s3_key.s3_key)

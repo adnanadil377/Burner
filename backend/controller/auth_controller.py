@@ -34,7 +34,8 @@ def create_refresh_token(data:dict, expires_delta:int):
     return encoded_jwt
 
 def authenticate_user(email:str, password:str, db:Session):
-    user = db.query(User).filter(User.email==email).first()
+    lower_email = email.lower()
+    user = db.query(User).filter(User.email==lower_email).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
     if not verify_password(password,user.password):
@@ -51,7 +52,8 @@ def register_new_user(user_data: UserCreate,db: Session):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
     hashed_pwd = get_hash_password(user_data.password)
-    new_user=User(name= user_data.name, email=user_data.email, password=hashed_pwd)
+    new_user_email=user_data.email.lower()
+    new_user=User(name= user_data.name, email=new_user_email, password=hashed_pwd)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
