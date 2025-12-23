@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 ALGORITHM = settings.ALGORITHM
 SECRET = settings.SECRET_KEY
 
-oauth2_schema = OAuth2PasswordBearer(tokenUrl="auth/token")
+oauth2_schema = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def get_current_user(token: Annotated[str, Depends(oauth2_schema)], db: Session = Depends(get_db)):
     
