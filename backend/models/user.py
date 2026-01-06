@@ -58,6 +58,7 @@ class RefreshToken(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False) # Added creation time
     expired_at = Column(DateTime(timezone=True))
     revoked_at = Column(DateTime(timezone=True))
+    session_id = Column(UUID(as_uuid=True), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True)
 
     user = relationship("User", back_populates="refresh_tokens")
 
