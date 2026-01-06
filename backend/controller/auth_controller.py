@@ -6,7 +6,7 @@ import uuid
 from fastapi import HTTPException, Request, Response, status
 from jose import jwt, JWTError
 from passlib.context import CryptContext
-from models.user import AuthIdentity, EmailVerificationToken, RefreshToken, User, Session as UserSession
+from models.user import AuthIdentity, EmailVerificationToken, PasswordResetToken, RefreshToken, User, Session as UserSession
 from schemas.user import UserCreate
 from core.config import settings
 from sqlalchemy.orm import Session
@@ -56,7 +56,11 @@ def verify_refresh_token(token:str, db):
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Refresh token expired")
 
-    db_token=db.query(RefreshToken).filter(RefreshToken.revoked_at.is_(None), RefreshToken.expired_at > datetime.now()).first()
+    db_token=db.query(RefreshToken).filter(
+        RefreshToken.revoked_at.is_(None), 
+        RefreshToken.token_hashed==hash_token(token), 
+        RefreshToken.expired_at > datetime.now(UTC)
+    ).first()
     if not db_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
     return {"user_id":payload.user_id,"user_email":payload.user_email, "db_token":db_token}
@@ -69,12 +73,13 @@ def rotate_refresh_token(old_token: str, db: Session):
     hashed_old_token = hash_token(old_token)
     
     db_refresh_token = db.query(RefreshToken).filter(
-        RefreshToken.token_hashed == hashed_old_token,
-        RefreshToken.revoked_at.is_(None)
-    ).first()
+        RefreshToken.token_hashed == hashed_old_token, 
+        RefreshToken.revoked_at.is_(None),
+        RefreshToken.expired_at > datetime.now(UTC)
+    ).with_for_update().first()
 
     if not db_refresh_token:
-        raise HTTPException(status_code=401, detail="Invalid or revoked refresh token")
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     db_refresh_token.revoked_at = datetime.now(UTC)
     
@@ -204,17 +209,36 @@ def logout_user(refresh_token, db:Session, response:Response):
     return {"message": "Logged out successfully"}
 
 
-async def user_email_verification(email_verification_token:str,user:User, db:Session):
-    db_email_token=db.query(EmailVerificationToken).filter(
-        EmailVerificationToken.user_id==user.id,
-        EmailVerificationToken.token_hashed == hash_token(email_verification_token),
-        EmailVerificationToken.revoked_at.is_(None)
-    ).first()
-    if not db_email_token or db_email_token.expired_at < datetime.now(UTC):        
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a valid token")
-    user.update(email_verified=True)
+async def user_email_verification(email_verification_token: str, user: User, db: Session):
+    hashed_token = hash_token(email_verification_token)
     
-    return {"message":"verified successfully"}
+    db_email_token = db.query(EmailVerificationToken).filter(
+        EmailVerificationToken.user_id == user.id,
+        EmailVerificationToken.token_hashed == hashed_token,
+        EmailVerificationToken.revoked_at.is_(None),
+        EmailVerificationToken.expired_at > datetime.now(UTC)  # ✅ UTC
+    ).first()
+    
+    if not db_email_token:        
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Invalid or expired verification token"
+        )
+    
+    # ✅ Fix: Proper SQLAlchemy update
+    user.email_verified = True
+    db_email_token.revoked_at = datetime.now(UTC)
+    
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to verify email"
+        )
+    
+    return {"message": "Email verified successfully"}
 
 def send_email_async(msg):
     with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
@@ -320,3 +344,240 @@ If you didn't request this, you can ignore this email.
     background_tasks.add_task(send_email_async, msg)
 
     return {"message": "Verification email sent successfully"}
+
+
+async def send_password_reset_token(email: str, db: Session, background_tasks: BackgroundTasks):
+    normalized_email = email.lower()
+    user = db.query(User).filter(User.email == normalized_email).first()
+    
+    # Always return success to prevent email enumeration attacks
+    if not user:
+        return {"message": "If the email exists, a password reset link has been sent"}
+    
+    # Revoke any existing password reset tokens for this user
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.revoked_at.is_(None)
+    ).update({"revoked_at": datetime.now(UTC)})
+    
+    token = create_jwt_token(
+        {
+            "user_id": str(user.id),
+            "user_email": user.email,
+            "purpose": "password_reset"
+        },
+        30  # 30 minutes expiry
+    )
+    
+    hashed_token = hash_token(token)
+    reset_token_db = PasswordResetToken(
+        user_id=user.id,
+        token_hashed=hashed_token,
+        expired_at=datetime.now(UTC) + timedelta(minutes=30)
+    )
+    
+    try:
+        db.add(reset_token_db)
+        db.commit()
+        db.refresh(reset_token_db)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate password reset token"
+        )
+    
+    reset_link = f"{FRONTEND_URI}/reset-password?token={token}"
+    
+    msg = EmailMessage()
+    msg["Subject"] = "Reset Your Password"
+    msg["From"] = EMAIL_ADDRESS
+    msg["To"] = user.email
+    
+    msg.set_content(
+        f"""
+Reset your password by clicking the link below:
+
+{reset_link}
+
+This link will expire in 30 minutes.
+If you didn't request this, you can safely ignore this email.
+"""
+    )
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <body style="margin:0; padding:0; background:#0a0a0a; font-family:'Söhne', 'Helvetica Neue', sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0a;">
+        <tr>
+          <td align="center" style="padding:80px 20px;">
+            <table width="520" style="background:#111; padding:48px; border-radius:16px; border:1px solid #1a1a1a; box-shadow:0 8px 32px rgba(0,0,0,0.4);">
+              <tr>
+                <td>
+                  <div style="width:48px; height:48px; background:#ff4500; border-radius:12px; margin-bottom:24px; display:flex; align-items:center; justify-content:center;">
+                    <span style="font-size:24px; color:#fff;">🔐</span>
+                  </div>
+                  
+                  <h2 style="color:#fff; font-size:28px; font-weight:700; margin:0 0 12px; letter-spacing:-0.02em;">
+                    Reset Your Password
+                  </h2>
+                  
+                  <p style="color:#888; font-size:16px; line-height:1.6; margin:0 0 32px;">
+                    We received a request to reset your password. Click the button below to create a new one.
+                  </p>
+
+                  <a href="{reset_link}"
+                     style="
+                        display:inline-block;
+                        padding:16px 40px;
+                        background:#ff4500;
+                        color:#fff;
+                        text-decoration:none;
+                        font-size:16px;
+                        font-weight:600;
+                        border-radius:10px;
+                        box-shadow:0 4px 12px rgba(255,69,0,0.3);
+                        transition:all 0.2s;
+                     ">
+                    Reset Password
+                  </a>
+
+                  <div style="margin:40px 0; padding:20px; background:#0a0a0a; border-radius:8px; border-left:3px solid #ff4500;">
+                    <p style="font-size:14px; color:#aaa; margin:0; line-height:1.5;">
+                      ⏱️ This link expires in <strong style="color:#ff4500">30 minutes</strong>
+                    </p>
+                  </div>
+
+                  <hr style="border:none; border-top:1px solid #1a1a1a; margin:32px 0;">
+
+                  <p style="font-size:13px; color:#666; line-height:1.6; margin:0;">
+                    If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.
+                  </p>
+                  
+                  <p style="font-size:12px; color:#555; margin:24px 0 0; line-height:1.6;">
+                    If the button doesn't work, copy and paste this URL:
+                    <br />
+                    <a href="{reset_link}" style="color:#ff4500; word-break:break-all; text-decoration:none;">
+                      {reset_link}
+                    </a>
+                  </p>
+                </td>
+              </tr>
+            </table>
+            
+            <p style="font-size:12px; color:#444; margin:32px 0 0; text-align:center;">
+              © 2026 Burner. Secure password reset service.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+    """
+    
+    msg.add_alternative(html_content, subtype="html")
+    background_tasks.add_task(send_email_async, msg)
+    
+    return {"message": "If the email exists, a password reset link has been sent"}
+
+
+async def reset_user_password(token: str, new_password: str, db: Session):
+    if not token or not new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token and new password are required"
+        )
+    
+    if len(new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters long"
+        )
+    
+    # Verify and decode the JWT token
+    try:
+        payload = jwt.decode(token, SECRET, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        purpose = payload.get("purpose")
+        
+        if not user_id or purpose != "password_reset":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid password reset token"
+            )
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password reset token has expired"
+        )
+    except jwt.JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid password reset token"
+        )
+    
+    # Verify token exists in database and hasn't been used
+    hashed_token = hash_token(token)
+    db_token = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token_hashed == hashed_token,
+        PasswordResetToken.user_id == user_id,
+        PasswordResetToken.revoked_at.is_(None),
+        PasswordResetToken.expired_at > datetime.now(UTC)
+    ).first()
+    
+    if not db_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired password reset token"
+        )
+    
+    # Get user and their auth identity
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    auth_identity = db.query(AuthIdentity).filter(
+        AuthIdentity.user_id == user.id,
+        AuthIdentity.provider == "password"
+    ).first()
+    
+    if not auth_identity:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password authentication not enabled for this user"
+        )
+    
+    # Update password
+    new_hashed_password = get_hash_password(new_password)
+    auth_identity.password_hashed = new_hashed_password
+    
+    # Revoke the reset token
+    db_token.revoked_at = datetime.now(UTC)
+    
+    # Revoke all existing sessions and refresh tokens for security
+    db.query(UserSession).filter(
+        UserSession.user_id == user.id,
+        UserSession.revoked_at.is_(None)
+    ).update({"revoked_at": datetime.now(UTC)})
+    
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == user.id,
+        RefreshToken.revoked_at.is_(None)
+    ).update({"revoked_at": datetime.now(UTC)})
+    
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reset password"
+        )
+    
+    return {
+        "message": "Password has been reset successfully. Please log in with your new password."
+    }

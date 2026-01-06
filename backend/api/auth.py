@@ -6,7 +6,7 @@ from fastapi import BackgroundTasks
 
 from dependency import get_current_user
 from schemas.user import UserCreate, UserResponse
-from controller.auth_controller import authenticate_user, create_jwt_token, create_new_user, logout_user, rotate_refresh_token, send_email_verification_token, user_email_verification, verify_refresh_token
+from controller.auth_controller import authenticate_user, create_jwt_token, create_new_user, logout_user, rotate_refresh_token, send_email_verification_token, send_password_reset_token, user_email_verification, verify_refresh_token
 from models.user import User
 from sqlalchemy.orm import Session
 from db.session import get_db
@@ -84,6 +84,26 @@ async def resent_email_verification(
     res = await send_email_verification_token(user, db, background_tasks)
     return res
 
+@router.post("/forgot-password")
+async def forgot_password(
+    email: str,
+    background_tasks: BackgroundTasks,
+    db: Annotated[Session, Depends(get_db)]
+):
+    await send_password_reset_token(email, db, background_tasks)
+    return {"message": "If the email exists, a password reset link has been sent"}
+
+@router.post("/reset-password")
+async def reset_password(
+    token: str,
+    new_password: str,
+    db: Annotated[Session, Depends(get_db)]
+):
+    from controller.auth_controller import reset_user_password
+    result = await reset_user_password(token, new_password, db)
+    return result
+
 @router.post("/me",response_model=UserResponse)
 async def read_me(user:Annotated[User,Depends(get_current_user)]):
     return user
+
