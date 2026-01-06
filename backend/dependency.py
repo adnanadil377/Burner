@@ -22,7 +22,7 @@ def get_current_user(token: Annotated[str, Depends(oauth2_schema)], db: Session 
     
     try:
         decoded_user = jwt.decode(token=token, algorithms=[ALGORITHM], key=SECRET)
-        email: str = decoded_user.get("user")
+        email: str = decoded_user.get("user_email")
         if email is None:
             raise credentials_exception
     except JWTError as e:

@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-3-flash-preview"  # Default Gemini model
     PRESIGNED_URL_EXPIRATION: int = 3600  # 1 hour in seconds
     
+    EMAIL_ADDRESS: str
+    EMAIL_PASSWORD: str
+    SMTP_SERVER: str
+    SMTP_PORT: int
+
+    FRONTEND_URI: str
+
     class Config:
         env_file = ".env"
 
