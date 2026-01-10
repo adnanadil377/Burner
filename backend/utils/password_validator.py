@@ -54,7 +54,6 @@ def validate_password(password: str) -> None:
             detail="Password must contain at least one special character (!@#$%^&*...)"
         )
     
-    # Check for common weak passwords
     common_passwords = [
         'password', '12345678', 'qwerty123', 'abc123456', 
         'password1', 'password123', 'welcome123', 'admin123'

@@ -50,7 +50,6 @@ def create_refresh_token(data:dict, expires_delta:int):
     expire = datetime.now(UTC) + timedelta(days=expires_delta)
     to_encode["jti"]=jti
     to_encode["exp"] = expire
-    # Use dictionary access, not object attribute
     encoded_jwt = jwt.encode(to_encode, REFRESH_SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -118,7 +117,7 @@ def rotate_refresh_token(old_token: str, db: Session):
         user_id=user.id, 
         token_hashed=new_hashed_token, 
         expired_at=datetime.now(UTC) + timedelta(days=7),
-        session_id=session_id  # <--- PASS THIS
+        session_id=session_id
     )
     
     db.add(new_db_refresh_token)
@@ -140,7 +139,7 @@ def authenticate_user(email:str, password:str, db:Session, request: Request):
     new_session = UserSession(
         user_id=user.id,
         ip_address=client_ip,
-        expired_at=datetime.now(UTC) + timedelta(days=7) # Session lasts as long as refresh token
+        expired_at=datetime.now(UTC) + timedelta(days=7)
     )
     db.add(new_session)
     db.flush()
@@ -171,7 +170,6 @@ async def create_new_user(create_user: UserCreate, db: Session, background_tasks
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
-    # Validate password strength
     validate_password(create_user.password)
 
     hashed_password = get_hash_password(create_user.password)
@@ -222,7 +220,7 @@ async def user_email_verification(email_verification_token: str, db: Session):
     db_email_token = db.query(EmailVerificationToken).filter(
         EmailVerificationToken.token_hashed == hashed_token,
         EmailVerificationToken.revoked_at.is_(None),
-        EmailVerificationToken.expired_at > datetime.now(UTC)  # ✅ UTC
+        EmailVerificationToken.expired_at > datetime.now(UTC)
     ).first()
     
     if not db_email_token:        
@@ -314,11 +312,9 @@ async def send_password_reset_token(email: str, db: Session, background_tasks: B
     normalized_email = email.lower()
     user = db.query(User).filter(User.email == normalized_email).first()
     
-    # Always return success to prevent email enumeration attacks
     if not user:
         return {"message": "If the email exists, a password reset link has been sent"}
     
-    # Revoke any existing password reset tokens for this user
     db.query(PasswordResetToken).filter(
         PasswordResetToken.user_id == user.id,
         PasswordResetToken.revoked_at.is_(None)
@@ -330,7 +326,7 @@ async def send_password_reset_token(email: str, db: Session, background_tasks: B
             "user_email": user.email,
             "purpose": "password_reset"
         },
-        30  # 30 minutes expiry
+        30
     )
     
     hashed_token = hash_token(token)
@@ -386,10 +382,8 @@ async def reset_user_password(token: str, new_password: str, db: Session):
             detail="Token and new password are required"
         )
     
-    # Validate password strength
     validate_password(new_password)
     
-    # Verify and decode the JWT token
     try:
         payload = jwt.decode(token, SECRET, algorithms=[ALGORITHM])
         user_id = payload.get("user_id")
@@ -411,7 +405,6 @@ async def reset_user_password(token: str, new_password: str, db: Session):
             detail="Invalid password reset token"
         )
     
-    # Verify token exists in database and hasn't been used
     hashed_token = hash_token(token)
     db_token = db.query(PasswordResetToken).filter(
         PasswordResetToken.token_hashed == hashed_token,
@@ -426,7 +419,6 @@ async def reset_user_password(token: str, new_password: str, db: Session):
             detail="Invalid or expired password reset token"
         )
     
-    # Get user and their auth identity
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(
@@ -445,14 +437,11 @@ async def reset_user_password(token: str, new_password: str, db: Session):
             detail="Password authentication not enabled for this user"
         )
     
-    # Update password
     new_hashed_password = get_hash_password(new_password)
     auth_identity.password_hashed = new_hashed_password
     
-    # Revoke the reset token
     db_token.revoked_at = datetime.now(UTC)
     
-    # Revoke all existing sessions and refresh tokens for security
     db.query(UserSession).filter(
         UserSession.user_id == user.id,
         UserSession.revoked_at.is_(None)
