@@ -3,6 +3,8 @@ from typing import Annotated
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, status, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import BackgroundTasks
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from dependency import get_current_user
 from schemas.user import UserCreate, UserResponse
@@ -13,8 +15,10 @@ from db.session import get_db
 from fastapi import Response
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 @router.post("/login", status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
 async def login(
     request: Request,
     formData: Annotated[OAuth2PasswordRequestForm, Depends()],
@@ -33,7 +37,9 @@ async def login(
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/hour")
 async def signup(
+    request: Request,
     create_user: UserCreate, 
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
@@ -43,8 +49,13 @@ async def signup(
 
 
 @router.post("/refresh", status_code = status.HTTP_200_OK)
-async def refresh(response:Response,refresh_token:str | None = Cookie(default=None),db:Session = Depends(get_db)):
-
+@limiter.limit("10/minute")
+async def refresh(
+    request: Request,
+    response:Response,
+    refresh_token:str | None = Cookie(default=None),
+    db:Session = Depends(get_db)
+):
     new_refresh_token,new_access_token=rotate_refresh_token(refresh_token, db)
 
     response.set_cookie(
@@ -76,7 +87,9 @@ async def verify_email(
     return verified_email
 
 @router.post("/resent-email-verification")
+@limiter.limit("2/minute")
 async def resent_email_verification(
+    request: Request,
     user: Annotated[User, Depends(get_current_user)],
     background_tasks: BackgroundTasks,
     db: Annotated[Session, Depends(get_db)]
@@ -85,7 +98,9 @@ async def resent_email_verification(
     return res
 
 @router.post("/forgot-password")
+@limiter.limit("3/hour")
 async def forgot_password(
+    request: Request,
     email: str,
     background_tasks: BackgroundTasks,
     db: Annotated[Session, Depends(get_db)]
@@ -94,7 +109,9 @@ async def forgot_password(
     return {"message": "If the email exists, a password reset link has been sent"}
 
 @router.post("/reset-password")
+@limiter.limit("5/minute")
 async def reset_password(
+    request: Request,
     token: str,
     new_password: str,
     db: Annotated[Session, Depends(get_db)]
