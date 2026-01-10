@@ -4,6 +4,7 @@ import smtplib
 from typing import Annotated
 import uuid
 from fastapi import HTTPException, Request, Response, status
+from fastapi.templating import Jinja2Templates
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from models.user import AuthIdentity, EmailVerificationToken, PasswordResetToken, RefreshToken, User, Session as UserSession
@@ -12,6 +13,7 @@ from core.config import settings
 from sqlalchemy.orm import Session
 import hashlib
 from fastapi import BackgroundTasks
+from utils.password_validator import validate_password
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ALGORITHM = settings.ALGORITHM
@@ -22,6 +24,8 @@ EMAIL_PASSWORD=settings.EMAIL_PASSWORD
 SMTP_SERVER=settings.SMTP_SERVER
 SMTP_PORT=settings.SMTP_PORT
 FRONTEND_URI=settings.FRONTEND_URI
+
+templates = Jinja2Templates(directory="templates")
 
 
 def get_hash_password(password: str):
@@ -167,6 +171,9 @@ async def create_new_user(create_user: UserCreate, db: Session, background_tasks
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
+    # Validate password strength
+    validate_password(create_user.password)
+
     hashed_password = get_hash_password(create_user.password)
     new_user = User(email=normalized_email)
     db.add(new_user)
@@ -209,11 +216,10 @@ def logout_user(refresh_token, db:Session, response:Response):
     return {"message": "Logged out successfully"}
 
 
-async def user_email_verification(email_verification_token: str, user: User, db: Session):
+async def user_email_verification(email_verification_token: str, db: Session):
     hashed_token = hash_token(email_verification_token)
     
     db_email_token = db.query(EmailVerificationToken).filter(
-        EmailVerificationToken.user_id == user.id,
         EmailVerificationToken.token_hashed == hashed_token,
         EmailVerificationToken.revoked_at.is_(None),
         EmailVerificationToken.expired_at > datetime.now(UTC)  # ✅ UTC
@@ -225,7 +231,14 @@ async def user_email_verification(email_verification_token: str, user: User, db:
             detail="Invalid or expired verification token"
         )
     
-    # ✅ Fix: Proper SQLAlchemy update
+    user = db.query(User).filter(User.id == db_email_token.user_id).first()
+
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    if user.email_verified:
+        return {"message": "Email already verified"}
+    
     user.email_verified = True
     db_email_token.revoked_at = datetime.now(UTC)
     
@@ -286,58 +299,9 @@ If you didn't request this, you can ignore this email.
 """
     )
 
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <body style="margin:0; padding:0; background:#0a0a0a; font-family:'Inter', -apple-system, sans-serif;">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td align="center" style="padding:60px 20px;">
-            <table width="480" style="background:#111; padding:40px; border-radius:12px; border:1px solid #222;">
-              <tr>
-                <td>
-                  <h2 style="color:#fff; font-size:24px; font-weight:600; margin:0 0 16px;">Verify Your Email</h2>
-                  <p style="color:#888; font-size:15px; line-height:1.6; margin:0 0 32px;">
-                    Click the button below to verify your email address and activate your account.
-                  </p>
-
-                  <a href="{verification_link}"
-                     style="
-                        display:inline-block;
-                        padding:14px 32px;
-                        background:#ff4500;
-                        color:#fff;
-                        text-decoration:none;
-                        font-size:15px;
-                        font-weight:600;
-                        border-radius:8px;
-                        transition:background 0.2s;
-                     ">
-                    Verify Email
-                  </a>
-
-                  <p style="font-size:13px; color:#666; margin:32px 0 24px;">
-                    This link expires in <strong style="color:#ff4500">30 minutes</strong>.
-                  </p>
-
-                  <hr style="border:none; border-top:1px solid #222; margin:32px 0;">
-
-                  <p style="font-size:12px; color:#555; line-height:1.6;">
-                    If the button doesn't work, copy this link:
-                    <br />
-                    <a href="{verification_link}" style="color:#ff4500; word-break:break-all;">
-                      {verification_link}
-                    </a>
-                  </p>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </body>
-    </html>
-    """
+    html_content = templates.get_template("email_verification.html").render(
+        verification_link=verification_link
+    )
 
     msg.add_alternative(html_content, subtype="html")
 
@@ -405,76 +369,9 @@ If you didn't request this, you can safely ignore this email.
 """
     )
     
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <body style="margin:0; padding:0; background:#0a0a0a; font-family:'Söhne', 'Helvetica Neue', sans-serif;">
-      <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0a;">
-        <tr>
-          <td align="center" style="padding:80px 20px;">
-            <table width="520" style="background:#111; padding:48px; border-radius:16px; border:1px solid #1a1a1a; box-shadow:0 8px 32px rgba(0,0,0,0.4);">
-              <tr>
-                <td>
-                  <div style="width:48px; height:48px; background:#ff4500; border-radius:12px; margin-bottom:24px; display:flex; align-items:center; justify-content:center;">
-                    <span style="font-size:24px; color:#fff;">🔐</span>
-                  </div>
-                  
-                  <h2 style="color:#fff; font-size:28px; font-weight:700; margin:0 0 12px; letter-spacing:-0.02em;">
-                    Reset Your Password
-                  </h2>
-                  
-                  <p style="color:#888; font-size:16px; line-height:1.6; margin:0 0 32px;">
-                    We received a request to reset your password. Click the button below to create a new one.
-                  </p>
-
-                  <a href="{reset_link}"
-                     style="
-                        display:inline-block;
-                        padding:16px 40px;
-                        background:#ff4500;
-                        color:#fff;
-                        text-decoration:none;
-                        font-size:16px;
-                        font-weight:600;
-                        border-radius:10px;
-                        box-shadow:0 4px 12px rgba(255,69,0,0.3);
-                        transition:all 0.2s;
-                     ">
-                    Reset Password
-                  </a>
-
-                  <div style="margin:40px 0; padding:20px; background:#0a0a0a; border-radius:8px; border-left:3px solid #ff4500;">
-                    <p style="font-size:14px; color:#aaa; margin:0; line-height:1.5;">
-                      ⏱️ This link expires in <strong style="color:#ff4500">30 minutes</strong>
-                    </p>
-                  </div>
-
-                  <hr style="border:none; border-top:1px solid #1a1a1a; margin:32px 0;">
-
-                  <p style="font-size:13px; color:#666; line-height:1.6; margin:0;">
-                    If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.
-                  </p>
-                  
-                  <p style="font-size:12px; color:#555; margin:24px 0 0; line-height:1.6;">
-                    If the button doesn't work, copy and paste this URL:
-                    <br />
-                    <a href="{reset_link}" style="color:#ff4500; word-break:break-all; text-decoration:none;">
-                      {reset_link}
-                    </a>
-                  </p>
-                </td>
-              </tr>
-            </table>
-            
-            <p style="font-size:12px; color:#444; margin:32px 0 0; text-align:center;">
-              © 2026 Burner. Secure password reset service.
-            </p>
-          </td>
-        </tr>
-      </table>
-    </body>
-    </html>
-    """
+    html_content = templates.get_template("password_reset.html").render(
+        reset_link=reset_link
+    )
     
     msg.add_alternative(html_content, subtype="html")
     background_tasks.add_task(send_email_async, msg)
@@ -489,11 +386,8 @@ async def reset_user_password(token: str, new_password: str, db: Session):
             detail="Token and new password are required"
         )
     
-    if len(new_password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 8 characters long"
-        )
+    # Validate password strength
+    validate_password(new_password)
     
     # Verify and decode the JWT token
     try:

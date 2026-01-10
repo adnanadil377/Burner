@@ -79,23 +79,33 @@ async def logout(
 
 @router.post("/verify-email")
 async def verify_email(
-    user:Annotated[User, Depends(get_current_user)],
     email_verification_token:str, 
     db:Annotated[Session, Depends(get_db)]
     ):
-    verified_email = user_email_verification(email_verification_token,user, db)
+    verified_email = user_email_verification(email_verification_token, db)
     return verified_email
 
 @router.post("/resent-email-verification")
 @limiter.limit("2/minute")
+@limiter.limit("5/hour")
 async def resent_email_verification(
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
     background_tasks: BackgroundTasks,
     db: Annotated[Session, Depends(get_db)]
 ):
-    res = await send_email_verification_token(user, db, background_tasks)
-    return res
+    if user.email_verified:
+        return {"message": "Email already verified"}
+
+    await send_email_verification_token(
+        user=user,
+        db=db,
+        background_tasks=background_tasks
+    )
+
+    return {
+        "message": "Verification email sent if not already verified"
+    }
 
 @router.post("/forgot-password")
 @limiter.limit("3/hour")
