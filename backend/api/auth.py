@@ -17,6 +17,16 @@ from core.config import settings
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
+def set_refresh_token_cookie(response: Response, token: str) -> None:
+    """Helper function to set refresh token cookie with consistent settings."""
+    response.set_cookie(
+        key="refresh_token", 
+        value=token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite="lax"
+    )
+
 @router.post("/login", status_code=status.HTTP_200_OK)
 @limiter.limit("5/minute")
 async def login(
@@ -26,13 +36,7 @@ async def login(
     db: Session = Depends(get_db)
 ):
     tokens = authenticate_user(formData.username, formData.password, db, request)
-    response.set_cookie(
-        key="refresh_token", 
-        value=tokens["refresh"],
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite="lax"
-    )
+    set_refresh_token_cookie(response, tokens["refresh"])
     return {"access_token": tokens["token"], "token_type": "bearer"}
 
 
@@ -57,14 +61,7 @@ async def refresh(
     db:Session = Depends(get_db)
 ):
     new_refresh_token,new_access_token=rotate_refresh_token(refresh_token, db)
-
-    response.set_cookie(
-        key="refresh_token", 
-        value=new_refresh_token,
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite="lax"
-    )
+    set_refresh_token_cookie(response, new_refresh_token)
     return {"access_token": new_access_token, "token_type": "bearer"}
 
 @router.post("/logout")
