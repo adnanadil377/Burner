@@ -1,5 +1,6 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from tasks.video_tasks import extract_audio_and_transcribe
 from models.video import Video
 from models.user import User
 import boto3
@@ -30,6 +31,43 @@ def get_s3_client():
         region_name="auto",
         config=Config(signature_version="s3v4")
     )
+
+def call_celery_audio(user: User, s3_key: str) -> dict:
+    """Trigger Celery task to extract audio and transcribe video.
+    
+    Args:
+        user: The authenticated user
+        s3_key: The S3 key of the video file
+        
+    Returns:
+        dict: Task information
+    """
+    try:
+        # Generate presigned URL for the video
+        s3_client = get_s3_client()
+        presigned_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': R2_BUCKET_NAME,
+                'Key': s3_key
+            },
+            ExpiresIn=PRESIGNED_URL_EXPIRATION
+        )
+        
+        # Trigger the Celery task
+        task = extract_audio_and_transcribe.delay(presigned_url)
+        
+        return {
+            "message": "Transcription task started",
+            "task_id": task.id
+        }
+    except ClientError as e:
+        error_code = getattr(e, "response", {}).get("Error", {}).get("Code", "Unknown")
+        logger.error(f"Failed to generate URL for transcription: {error_code}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to start transcription task"
+        )
 
 def get_file_extension(filename: str) -> str:
     """Extract file extension from filename."""
@@ -164,6 +202,7 @@ def initiate_video_upload(user: User, file_name: str, db: Session, content_type:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not create video record"
         )
+
 
 def confirm_upload(db: Session, video_id: int, user: User) -> dict:
     """Confirm that a video upload is complete and verify the file exists in storage."""

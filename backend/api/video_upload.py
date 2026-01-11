@@ -1,8 +1,10 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from models.video import Video
 from db.session import get_db
 from controller.video_upload_controller import (
+    call_celery_audio,
     create_presigned_download_url, 
     initiate_video_upload, 
     confirm_upload
@@ -50,3 +52,41 @@ def upload_success(
 ):
     """Confirm that a video upload is complete."""
     return confirm_upload(db=db, video_id=video_id, user=user)
+
+
+@router.get("/get_user_videos")
+def get_user_video(
+    user: Annotated[User, Depends(get_current_user)], 
+    db: Session = Depends(get_db)
+):
+    all_videos = db.query(Video).filter(Video.user_id == user.id).all()
+    return {"all_video": all_videos}
+
+
+
+@router.post("/transcribe")
+def transcribe(
+    video_id: int, 
+    user: Annotated[User, Depends(get_current_user)], 
+    db: Session = Depends(get_db)
+):
+    # Validate video_id is positive
+    if video_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid video_id"
+        )
+    
+    # Verify video exists and belongs to the user
+    s3_key = db.query(Video).filter(
+        Video.id == video_id,
+        Video.user_id == user.id
+    ).first()
+    
+    if not s3_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found or you don't have permission to access it"
+        )
+    
+    return call_celery_audio(user, s3_key.s3_key)
