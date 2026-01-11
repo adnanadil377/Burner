@@ -45,8 +45,8 @@ export const FileUpload = () => {
    * Step 1: Request presigned URL from your API
    */
   const requestPresignedUrl = async (fileName: string, fileType: string): Promise<PresignedUrlResponse> => {
-    const response = await fetch(`http://127.0.0.1:8000/video/video-upload?fileName=${fileName}`, {
-      method: 'PUT',
+    const response = await fetch(`http://127.0.0.1:8000/video/upload?file_name=${fileName}`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'content-type': fileType,
