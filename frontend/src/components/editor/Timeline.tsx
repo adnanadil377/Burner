@@ -32,11 +32,11 @@ const Timeline = ({ currentTime, duration, subtitles, onSeek }: TimelineProps) =
   return (
     <div
       ref={timelineRef}
-      className="relative h-full overflow-x-auto overflow-y-hidden bg-zinc-950 cursor-pointer group"
+      className="relative h-5/6 overflow-x-auto overflow-y-hidden bg-[#111022] cursor-pointer group"
       onClick={handleTimelineClick}
       style={{
         backgroundImage: `
-          linear-gradient(to right, rgba(251, 191, 36, 0.05) 1px, transparent 1px)
+          linear-gradient(to right, rgba(139, 92, 246, 0.03) 1px, transparent 1px)
         `,
         backgroundSize: `${PIXELS_PER_SECOND}px 100%`
       }}
@@ -47,15 +47,15 @@ const Timeline = ({ currentTime, duration, subtitles, onSeek }: TimelineProps) =
         style={{ width: `${timelineWidth}px`, minHeight: '100%' }}
       >
         {/* Time markers */}
-        <div className="absolute top-0 left-0 right-0 h-12 border-b border-zinc-800/50">
+        <div className="absolute top-0 left-0 right-0 h-12 border-b border-white/5">
           {timeMarkers.map((second) => (
             <div
               key={second}
               className="absolute top-0 flex flex-col items-center"
               style={{ left: `${second * PIXELS_PER_SECOND}px` }}
             >
-              <div className="w-px h-3 bg-zinc-700" />
-              <span className="text-xs text-zinc-600 font-mono mt-1">
+              <div className="w-px h-2 bg-gray-700" />
+              <span className="text-[10px] text-gray-600 font-mono mt-0.5">
                 {second}s
               </span>
             </div>
@@ -72,10 +72,10 @@ const Timeline = ({ currentTime, duration, subtitles, onSeek }: TimelineProps) =
             return (
               <div
                 key={subtitle.id}
-                className={`absolute top-2 h-16 rounded-lg border-2 transition-all duration-300 cursor-pointer overflow-hidden ${
+                className={`absolute top-2 h-14 rounded-lg border transition-all duration-300 cursor-pointer overflow-hidden ${
                   isActive
-                    ? 'bg-gradient-to-br from-amber-500 to-orange-600 border-amber-400 shadow-lg shadow-amber-500/50'
-                    : 'bg-gradient-to-br from-blue-600 to-indigo-700 border-blue-500 hover:border-blue-400 shadow-md'
+                    ? 'bg-purple-500/20 border-purple-500/50 shadow-lg shadow-purple-500/20'
+                    : 'bg-[#1A1A28] border-white/10 hover:border-white/20'
                 }`}
                 style={{
                   left: `${left}px`,
@@ -87,16 +87,15 @@ const Timeline = ({ currentTime, duration, subtitles, onSeek }: TimelineProps) =
                 }}
               >
                 <div className="px-3 py-2 h-full flex items-center">
-                  <p className="text-xs font-semibold text-white truncate leading-tight">
+                  <p className="text-xs text-white/80 truncate">
                     {subtitle.text}
                   </p>
                 </div>
                 
                 {/* Active indicator pulse */}
                 {isActive && (
-                  <div className="absolute top-0 right-0 w-2 h-2 m-1">
-                    <div className="absolute inset-0 bg-white rounded-full animate-ping" />
-                    <div className="absolute inset-0 bg-white rounded-full" />
+                  <div className="absolute top-1 right-1 w-1.5 h-1.5">
+                    <div className="absolute inset-0 bg-purple-400 rounded-full" />
                   </div>
                 )}
               </div>
@@ -104,27 +103,24 @@ const Timeline = ({ currentTime, duration, subtitles, onSeek }: TimelineProps) =
           })}
         </div>
 
-        {/* Playhead (Red Line) */}
+        {/* Playhead (Purple Line) */}
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-red-500 shadow-lg shadow-red-500/50 z-10 pointer-events-none transition-opacity duration-200"
+          className="absolute top-0 bottom-0 w-px bg-purple-500 z-10 pointer-events-none"
           style={{
             left: `${currentTime * PIXELS_PER_SECOND}px`,
             opacity: currentTime > 0 ? 1 : 0
           }}
         >
           {/* Playhead top triangle */}
-          <div className="absolute -top-1 left-1/2 -translate-x-1/2">
+          <div className="absolute -top-0.5 left-1/2 -translate-x-1/2">
             <div 
-              className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-red-500"
+              className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[6px] border-t-purple-500"
             />
           </div>
-          
-          {/* Playhead glow effect */}
-          <div className="absolute inset-0 bg-red-500 blur-sm opacity-50" />
         </div>
 
         {/* Hover time indicator */}
-        <div className="absolute top-0 left-0 w-px h-12 bg-zinc-500/50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+        <div className="absolute top-0 left-0 w-px h-12 bg-gray-600/50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
       </div>
     </div>
   );

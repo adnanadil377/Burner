@@ -59,24 +59,15 @@ export default function PageHeader({ title, actions, variant = 'default', logo }
   }
 
   return (
-    <div className="bg-white border-b border-neutral-200 px-6 py-4">
+    <div className="bg-neutral-950 px-8 pt-6 pb-2 border-b border-neutral-900">
       <div className="flex items-center justify-between">
-        {/* Left: Logo + Page Title with Icon */}
+        {/* Left: Page Title with Icon */}
         <div className="flex items-center gap-4">
-          {/* Page Info */}
-          <div className="flex items-center gap-3">
-            {Icon && (
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center">
-                <Icon size={20} className="text-gray-600" />
-              </div>
-            )}
-            <h1 className="text-xl font-semibold text-neutral-900">
-              {displayTitle}
-            </h1>
-          </div>
+          <h1 className="text-3xl font-extrabold text-white tracking-tight" style={{ fontFamily: 'serif' }}>
+            {displayTitle}
+          </h1>
         </div>
-
-        {/* Right: Actions + Navigation + Theme + Notifications + Profile */}
+        {/* Right: Actions */}
         <div className="flex items-center gap-3">
           {actions}
         </div>

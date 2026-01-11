@@ -55,9 +55,10 @@ export default function AppRoutes() {
           <DashboardLayout />
         </PrivateRoute>
       }>
-        <Route path="/dashboard" element={<DashboardOverview />} />
+          {/* Redirecting /dashboard to /projects */}
+          <Route path="/dashboard" element={<Navigate to="/projects" replace />} />
         <Route path="/editor" element={<EditorPage />} />
-        <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/library" element={<LibraryPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>

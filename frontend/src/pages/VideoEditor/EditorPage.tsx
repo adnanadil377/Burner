@@ -1,4 +1,5 @@
 import VideoEditor from '../../components/editor/VideoEditor';
+import VideoEditorMobile from '../../components/editor/VideoEditorMobile';
 import { MOCK_VIDEO_URL, MOCK_SUBTITLES } from '../../data/mock';
 
 /**
@@ -18,12 +19,21 @@ export default function EditorPage() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-zinc-950">
-      <VideoEditor 
-        videoUrl={MOCK_VIDEO_URL}
-        subtitles={MOCK_SUBTITLES}
-        onSubtitlesChange={handleSubtitlesChange}
-      />
+    <div className="fixed inset-0 z-50 bg-zinc-950 ">
+      <div className='hidden lg:block'>
+        <VideoEditor 
+          videoUrl={MOCK_VIDEO_URL}
+          subtitles={MOCK_SUBTITLES}
+          onSubtitlesChange={handleSubtitlesChange}
+        />
+      </div>
+      <div className='lg:hidden'>
+        <VideoEditorMobile 
+          videoUrl={MOCK_VIDEO_URL}
+          subtitles={MOCK_SUBTITLES}
+          onSubtitlesChange={handleSubtitlesChange}
+        />
+      </div>
     </div>
   );
 }

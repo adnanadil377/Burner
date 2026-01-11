@@ -357,67 +357,6 @@ export const FileUpload = () => {
           accept="video/*,image/*,.pdf,.doc,.docx"
         />
       </div>
-
-      {/* Two-Step Process Indicator */}
-      <div className="mt-8 grid grid-cols-2 gap-4">
-        <div className={`
-          p-4 rounded-xl border transition-all duration-300
-          ${uploadState.status === 'requesting' || uploadState.status === 'uploading' || uploadState.status === 'success'
-            ? 'border-[var(--flame-orange)] bg-[var(--flame-orange)]/10'
-            : 'border-[var(--text-tertiary)]/30 bg-[var(--bg-tertiary)]'
-          }
-        `}>
-          <div className="flex items-center gap-3">
-            <div className={`
-              w-8 h-8 rounded-full flex items-center justify-center
-              font-bold font-mono text-sm
-              ${uploadState.status === 'requesting' || uploadState.status === 'uploading' || uploadState.status === 'success'
-                ? 'bg-[var(--flame-orange)] text-[var(--bg-primary)]'
-                : 'bg-[var(--text-tertiary)]/20 text-[var(--text-tertiary)]'
-              }
-            `}>
-              1
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-[var(--text-primary)] font-['Outfit']">
-                Request Permission
-              </p>
-              <p className="text-xs text-[var(--text-tertiary)] font-['Outfit']">
-                Get presigned URL from API
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className={`
-          p-4 rounded-xl border transition-all duration-300
-          ${uploadState.status === 'uploading' || uploadState.status === 'success'
-            ? 'border-[var(--flame-orange)] bg-[var(--flame-orange)]/10'
-            : 'border-[var(--text-tertiary)]/30 bg-[var(--bg-tertiary)]'
-          }
-        `}>
-          <div className="flex items-center gap-3">
-            <div className={`
-              w-8 h-8 rounded-full flex items-center justify-center
-              font-bold font-mono text-sm
-              ${uploadState.status === 'uploading' || uploadState.status === 'success'
-                ? 'bg-[var(--flame-orange)] text-[var(--bg-primary)]'
-                : 'bg-[var(--text-tertiary)]/20 text-[var(--text-tertiary)]'
-              }
-            `}>
-              2
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-[var(--text-primary)] font-['Outfit']">
-                Direct Upload
-              </p>
-              <p className="text-xs text-[var(--text-tertiary)] font-['Outfit']">
-                Send to Cloudflare R2
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };

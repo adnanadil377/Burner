@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import { Folder, MoreVertical, Calendar } from 'lucide-react';
+import Modal from '../../components/ui/Modal';
+import { FileUpload } from '../../components/Dashboard/FileUpload';
 
 /**
  * Projects Page
@@ -24,9 +27,46 @@ export default function ProjectsPage() {
     }
   ];
 
+  const [modalOpen, setModalOpen] = useState(false);
+
   return (
     <div className="p-8">
       <div className="max-w-7xl mx-auto">
+        {/* Header Row */}
+        <div className="flex items-center justify-end mb-2 pt-2">
+          <button
+            className="flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white font-semibold px-7 py-2.5 rounded-xl text-base transition-all shadow-md"
+            onClick={() => setModalOpen(true)}
+          >
+            <span className="text-lg font-bold">+</span>
+            Add Project
+          </button>
+        </div>
+
+        {/* Modal for File Upload */}
+        <Modal open={modalOpen} onClose={() => setModalOpen(false)}>
+          <div className="px-8 py-7 w-[420px] max-w-full">
+            <h2 className="text-2xl font-extrabold text-white mb-7 font-serif">Create New Project</h2>
+            <FileUpload />
+            <div className="flex gap-4 mt-8">
+              <button
+                className="flex-1 py-2 rounded-lg border border-neutral-700 bg-neutral-900 text-white font-semibold hover:bg-neutral-800 transition"
+                onClick={() => setModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="flex-1 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white font-semibold transition shadow"
+                // This button can be wired to trigger upload if needed
+                onClick={() => {}}
+                disabled
+              >
+                Upload
+              </button>
+            </div>
+          </div>
+        </Modal>
+
         {/* Projects Grid */}
         {projects.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

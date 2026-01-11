@@ -1,8 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Type, Palette, Layout, Box, Sparkles, Clock, ChevronLeft, ChevronRight, Monitor } from 'lucide-react';
 import VideoPlayer from './VideoPlayer';
 import Timeline from './Timeline';
+import SubtitleDrawer, { type DrawerTab } from './SubtitleDrawer';
+import ResolutionDropdown from './ResolutionDropdown';
+import EditorSidebar from './EditorSidebar';
 import type { Subtitle } from '../../data/mock';
+import { captionPresets, type CaptionStyle } from '../../config/captionStyles';
+import type { VideoResolution } from '../../config/videoResolutions';
 
 interface VideoEditorProps {
   videoUrl: string;
@@ -10,8 +15,6 @@ interface VideoEditorProps {
   onSubtitlesChange?: (subtitles: Subtitle[]) => void;
 }
 
-type FontFamily = 'Montserrat' | 'Playfair Display' | 'Space Mono' | 'Bebas Neue' | 'Crimson Pro';
-type Position = 'Top' | 'Center' | 'Bottom';
 
 const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange }: VideoEditorProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -21,16 +24,34 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
   const [subtitles, setSubtitles] = useState<Subtitle[]>(initialSubtitles);
   const [activeSubtitleId, setActiveSubtitleId] = useState<string | null>(null);
   
-  // Style controls
-  const [selectedFont, setSelectedFont] = useState<FontFamily>('Montserrat');
-  const [selectedColor, setSelectedColor] = useState('#FCD34D');
-  const [selectedPosition, setSelectedPosition] = useState<Position>('Bottom');
+  // UI State
+  const [activeDrawerTab, setActiveDrawerTab] = useState<DrawerTab>('text');
+  
+  // Style controls - use full CaptionStyle
+  const [currentStyle, setCurrentStyle] = useState<CaptionStyle>(captionPresets[0]);
   const [transcriptText, setTranscriptText] = useState('');
+  
+  // Resolution state
+  const [selectedResolution, setSelectedResolution] = useState<VideoResolution | null>(null);
+
+  // Handle style change from presets
+  const handleStyleChange = (style: CaptionStyle) => {
+    setCurrentStyle(style);
+  };
+  
+  // Handle resolution change
+  const handleResolutionChange = (resolution: VideoResolution) => {
+    setSelectedResolution(resolution);
+  };
 
   // Find active subtitle
   const activeSubtitle = subtitles.find(
     (sub) => currentTime >= sub.start && currentTime <= sub.end
   );
+
+  const currentIndex = activeSubtitleId ? subtitles.findIndex(sub => sub.id === activeSubtitleId) : -1;
+  const isFirstSubtitle = currentIndex === 0;
+  const isLastSubtitle = currentIndex === subtitles.length - 1;
 
   useEffect(() => {
     if (activeSubtitle && activeSubtitle.id !== activeSubtitleId) {
@@ -118,221 +139,146 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
     }
   };
 
+  const navigateToNextSubtitle = () => {
+    if (!activeSubtitleId) return;
+    const idx = subtitles.findIndex(sub => sub.id === activeSubtitleId);
+    if (idx < subtitles.length - 1) {
+      const nextSubtitle = subtitles[idx + 1];
+      handleSubtitleClick(nextSubtitle);
+    }
+  };
+
+  const navigateToPrevSubtitle = () => {
+    if (!activeSubtitleId) return;
+    const idx = subtitles.findIndex(sub => sub.id === activeSubtitleId);
+    if (idx > 0) {
+      const prevSubtitle = subtitles[idx - 1];
+      handleSubtitleClick(prevSubtitle);
+    }
+  };
+
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-
   return (
-    <div className="h-screen w-full flex flex-col bg-zinc-950 overflow-hidden">
-      {/* Main Content Area */}
-      <div className="flex-1 flex overflow-hidden">
+    <div className="h-screen w-full flex bg-zinc-950 overflow-hidden">
+      
+      {/* 1. Far Left: Navigation/Selector Sidebar */}
+      <EditorSidebar 
+        activeTab={activeDrawerTab}
+        onTabChange={setActiveDrawerTab}
+        onNavigatePrev={navigateToPrevSubtitle}
+        onNavigateNext={navigateToNextSubtitle}
+        canNavigatePrev={!!activeSubtitleId && !isFirstSubtitle}
+        canNavigateNext={!!activeSubtitleId && !isLastSubtitle}
+      />
+
+      {/* 2. Middle: Video Player Stage (Flex 1) */}
+      <div className="flex-1 flex flex-col bg-zinc-900 min-w-0">
         
-        {/* Left: Video Player Stage (60%) */}
-        <div className="w-[60%] flex flex-col bg-zinc-900">
+        {/* Video Display Area */}
+        <div className="flex-1 relative bg-black">
+          {/* Resolution Dropdown Overlay */}
+          <div className="absolute top-4 left-4 z-20">
+            <ResolutionDropdown
+              selectedResolution={selectedResolution}
+              onSelectResolution={handleResolutionChange}
+            />
+          </div>
           
-          {/* Video Display Area */}
-          <div className="flex-1 relative bg-black">
-            <VideoPlayer
-              videoUrl={videoUrl}
-              currentTime={currentTime}
-              subtitles={subtitles}
-              videoRef={videoRef}
-              onLoadedMetadata={handleLoadedMetadata}
-              captionText={activeSubtitle?.text || ''}
-              fontSize={42}
-              textAlign="center"
-              showBackground={false}
-              showStroke={true}
-            />
+          <VideoPlayer
+            videoUrl={videoUrl}
+            currentTime={currentTime}
+            subtitles={subtitles}
+            videoRef={videoRef}
+            onLoadedMetadata={handleLoadedMetadata}
+            captionText={activeSubtitle?.text || ''}
+            captionStyle={currentStyle}
+            resolution={selectedResolution || undefined}
+          />
 
-            {/* Center Play/Pause Overlay */}
-            {!isPlaying && (
-              <div 
-                className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer transition-opacity hover:bg-black/30"
-                onClick={togglePlayPause}
-              >
-                <div className="w-20 h-20 rounded-full bg-amber-500 shadow-2xl shadow-amber-500/50 flex items-center justify-center hover:bg-amber-400 transition-all hover:scale-110">
-                  <Play className="w-10 h-10 text-black ml-1" fill="black" />
-                </div>
+          {/* Center Play/Pause Overlay */}
+          {!isPlaying && (
+            <div 
+              className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer transition-opacity hover:bg-black/30"
+              onClick={togglePlayPause}
+            >
+              <div className="w-20 h-20 rounded-full bg-lash-900 shadow-2xl shadow-lash-800/50 flex items-center justify-center hover:bg-lash-800 transition-all hover:scale-110">
+                <Play className="w-10 h-10 text-white ml-1" fill="white" />
               </div>
-            )}
-          </div>
-
-          {/* Video Controls Bar */}
-          <div className="h-20 bg-zinc-950 border-t border-zinc-800 flex items-center justify-between px-8">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={skipBackward}
-                className="p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-white"
-              >
-                <SkipBack className="w-5 h-5" />
-              </button>
-              
-              <button
-                onClick={togglePlayPause}
-                className="p-3 rounded-lg bg-amber-500 hover:bg-amber-400 transition-all hover:scale-105 shadow-lg shadow-amber-500/30"
-              >
-                {isPlaying ? (
-                  <Pause className="w-6 h-6 text-black" fill="black" />
-                ) : (
-                  <Play className="w-6 h-6 text-black" fill="black" />
-                )}
-              </button>
-              
-              <button
-                onClick={skipForward}
-                className="p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-white"
-              >
-                <SkipForward className="w-5 h-5" />
-              </button>
             </div>
-
-            <div className="flex items-center gap-4">
-              <span className="text-sm font-mono text-zinc-400">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </span>
-            </div>
-          </div>
-
-          {/* Timeline Section */}
-          <div className="h-32 bg-zinc-950 border-t border-zinc-800">
-            <Timeline
-              currentTime={currentTime}
-              duration={duration}
-              subtitles={subtitles}
-              onSeek={handleSeek}
-            />
-          </div>
+          )}
         </div>
 
-        {/* Right: Script Sidebar (40%) */}
-        <div className="w-[40%] bg-zinc-900 border-l border-zinc-800 flex flex-col">
-          
-          {/* Transcript Editor */}
-          <div className="p-6 border-b border-zinc-800">
-            <h3 className="text-lg font-semibold text-white mb-3 tracking-tight">Transcript</h3>
-            <textarea
-              value={transcriptText}
-              onChange={(e) => handleTranscriptChange(e.target.value)}
-              placeholder="Select a subtitle to edit..."
-              className="w-full h-24 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent resize-none font-sans"
-            />
-          </div>
-
-          {/* Style Controls */}
-          <div className="p-6 border-b border-zinc-800">
-            <h3 className="text-lg font-semibold text-white mb-4 tracking-tight">Style Controls</h3>
-            
-            {/* Font Selector */}
-            <div className="mb-4">
-              <label className="text-sm text-zinc-400 mb-2 block">Font:</label>
-              <select
-                value={selectedFont}
-                onChange={(e) => setSelectedFont(e.target.value as FontFamily)}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
-              >
-                <option value="Montserrat">Montserrat</option>
-                <option value="Playfair Display">Playfair Display</option>
-                <option value="Space Mono">Space Mono</option>
-                <option value="Bebas Neue">Bebas Neue</option>
-                <option value="Crimson Pro">Crimson Pro</option>
-              </select>
-            </div>
-
-            {/* Color Selector */}
-            <div className="mb-4">
-              <label className="text-sm text-zinc-400 mb-2 block">Color:</label>
-              <div className="flex items-center gap-3">
-                <select
-                  value={selectedColor}
-                  onChange={(e) => setSelectedColor(e.target.value)}
-                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
-                >
-                  <option value="#FCD34D">Yellow</option>
-                  <option value="#EF4444">Red</option>
-                  <option value="#3B82F6">Blue</option>
-                  <option value="#10B981">Green</option>
-                  <option value="#FFFFFF">White</option>
-                </select>
-                <div 
-                  className="w-10 h-10 rounded-lg border-2 border-zinc-700 shadow-inner"
-                  style={{ backgroundColor: selectedColor }}
-                />
-              </div>
-            </div>
-
-            {/* Position Selector */}
-            <div>
-              <label className="text-sm text-zinc-400 mb-2 block">Position:</label>
-              <select
-                value={selectedPosition}
-                onChange={(e) => setSelectedPosition(e.target.value as Position)}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
-              >
-                <option value="Top">Top</option>
-                <option value="Center">Center</option>
-                <option value="Bottom">Bottom</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Subtitle List */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <h3 className="text-lg font-semibold text-white mb-4 tracking-tight">Subtitles</h3>
-            <div className="space-y-3">
-              {subtitles.map((subtitle) => {
-                const isActive = subtitle.id === activeSubtitleId;
-                
-                return (
-                  <div
-                    key={subtitle.id}
-                    onClick={() => handleSubtitleClick(subtitle)}
-                    className={`p-4 rounded-lg cursor-pointer transition-all ${
-                      isActive
-                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-lg shadow-amber-500/30'
-                        : 'bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 hover:border-zinc-600'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <span className={`text-xs font-mono ${
-                        isActive ? 'text-black/70' : 'text-zinc-500'
-                      }`}>
-                        {formatTime(subtitle.start)} - {formatTime(subtitle.end)}
-                      </span>
-                      {isActive && (
-                        <div className="w-2 h-2 bg-black rounded-full animate-pulse" />
-                      )}
-                    </div>
-                    <p className={`text-sm leading-relaxed ${
-                      isActive ? 'text-black font-medium' : 'text-zinc-300'
-                    }`}>
-                      {subtitle.text}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Save Button */}
-          <div className="p-6 border-t border-zinc-800">
+        {/* Video Controls Bar */}
+        <div className="h-20 bg-zinc-950 border-t border-zinc-800 flex items-center justify-between px-8">
+          <div className="flex items-center gap-4">
             <button
-              onClick={handleSaveChanges}
-              disabled={!activeSubtitleId}
-              className={`w-full py-3 rounded-lg font-semibold transition-all ${
-                activeSubtitleId
-                  ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/30 hover:scale-[1.02]'
-                  : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-              }`}
+              onClick={skipBackward}
+              className="p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-white"
             >
-              Save Changes
+              <SkipBack className="w-5 h-5" />
+            </button>
+            
+            <button
+              onClick={togglePlayPause}
+              className="p-3 rounded-lg bg-lash-900 hover:bg-lash-800 transition-all hover:scale-105 shadow-lg shadow-lash-800/30"
+            >
+              {isPlaying ? (
+                <Pause className="w-6 h-6 text-white" fill="white" />
+              ) : (
+                <Play className="w-6 h-6 text-white" fill="white" />
+              )}
+            </button>
+            
+            <button
+              onClick={skipForward}
+              className="p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-white"
+            >
+              <SkipForward className="w-5 h-5" />
             </button>
           </div>
+
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-mono text-zinc-400">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+          </div>
+        </div>
+
+        {/* Timeline Section */}
+        <div className="h-56 bg-zinc-950 border-t border-zinc-800">
+          <Timeline
+            currentTime={currentTime}
+            duration={duration}
+            subtitles={subtitles}
+            onSeek={handleSeek}
+          />
         </div>
       </div>
+
+      {/* 3. Far Right: Content Drawer (Fixed Width) */}
+      <div className="w-[30%] min-w-[320px] flex flex-col">
+        <SubtitleDrawer
+          activeTab={activeDrawerTab}
+          activeSubtitle={activeSubtitle}
+          activeSubtitleId={activeSubtitleId}
+          subtitles={subtitles}
+          transcriptText={transcriptText}
+          currentStyle={currentStyle}
+          selectedResolution={selectedResolution}
+          onTranscriptChange={handleTranscriptChange}
+          onStyleChange={handleStyleChange}
+          onSaveChanges={handleSaveChanges}
+          onSubtitleClick={handleSubtitleClick}
+          onResolutionChange={handleResolutionChange}
+          formatTime={formatTime}
+        />
+      </div>
+
     </div>
   );
 };
