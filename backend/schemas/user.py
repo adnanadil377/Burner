@@ -14,3 +14,13 @@ class UserResponse(UserBase):
     email_verified: bool
     class Config:
         from_attributes=True
+
+class EmailVerificationRequest(BaseModel):
+    email_verification_token: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str

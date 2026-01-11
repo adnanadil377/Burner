@@ -58,6 +58,8 @@ def verify_refresh_token(token:str, db):
         payload = jwt.decode(token,REFRESH_SECRET_KEY,algorithms=[ALGORITHM])
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Refresh token expired")
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
     db_token=db.query(RefreshToken).filter(
         RefreshToken.revoked_at.is_(None), 
@@ -66,7 +68,11 @@ def verify_refresh_token(token:str, db):
     ).first()
     if not db_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
-    return {"user_id":payload.user_id,"user_email":payload.user_email, "db_token":db_token}
+    return {
+        "user_id": payload.get("user_id"),
+        "user_email": payload.get("user_email"),
+        "db_token": db_token,
+    }
 
 
 def rotate_refresh_token(old_token: str, db: Session):
@@ -91,7 +97,7 @@ def rotate_refresh_token(old_token: str, db: Session):
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     try:
-        payload=jwt.decode(old_token, REFRESH_SECRET_KEY, algorithms=ALGORITHM)
+        payload=jwt.decode(old_token, REFRESH_SECRET_KEY, algorithms=[ALGORITHM])
         session_id = payload.get("session_id")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token structure")
@@ -132,9 +138,14 @@ def rotate_refresh_token(old_token: str, db: Session):
 def authenticate_user(email:str, password:str, db:Session, request: Request):
     lower_email = email.lower()
     user = db.query(User).filter(User.email==lower_email).first()
-    user_auth_identity = db.query(AuthIdentity).filter(AuthIdentity.user_id == user.id, AuthIdentity.provider=="password").first()
+    user_auth_identity = None
+    if user:
+        user_auth_identity = db.query(AuthIdentity).filter(
+            AuthIdentity.user_id == user.id,
+            AuthIdentity.provider == "password"
+        ).first()
     if not user or not user_auth_identity or not verify_hash_password(password, user_auth_identity.password_hashed):
-        raise HTTPException(status_code=401, detail="Incorrect username or password")
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
     client_ip = request.client.host
     new_session = UserSession(
         user_id=user.id,
@@ -208,6 +219,7 @@ def logout_user(refresh_token, db:Session, response:Response):
             db.commit()
             
     except Exception:
+        # Silently handle invalid or expired tokens - still allow logout
         pass 
     
     response.delete_cookie("refresh_token")
@@ -232,7 +244,7 @@ async def user_email_verification(email_verification_token: str, db: Session):
     user = db.query(User).filter(User.id == db_email_token.user_id).first()
 
     if not user:
-        raise HTTPException(404, "User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     if user.email_verified:
         return {"message": "Email already verified"}
@@ -323,7 +335,7 @@ async def send_password_reset_token(email: str, db: Session, background_tasks: B
     token = create_jwt_token(
         {
             "user_id": str(user.id),
-            "user_email": user.email,
+            "user_email": normalized_email,
             "purpose": "password_reset"
         },
         30
