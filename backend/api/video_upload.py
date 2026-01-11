@@ -54,7 +54,7 @@ def upload_success(
     return confirm_upload(db=db, video_id=video_id, user=user)
 
 
-@router.get("/get_user_videos")
+@router.get("/all")
 def get_user_video(
     user: Annotated[User, Depends(get_current_user)], 
     db: Session = Depends(get_db)
