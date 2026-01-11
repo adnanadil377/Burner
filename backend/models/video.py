@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, DateTime, Integer, String, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
 from db.base import Base
 
@@ -10,3 +10,4 @@ class Video(Base):
     bucket = Column(String, nullable=False)
     original_name = Column(String, nullable=False)
     status = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
