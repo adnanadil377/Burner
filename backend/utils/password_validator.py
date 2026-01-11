@@ -1,6 +1,12 @@
 import re
 from fastapi import HTTPException, status
 
+# Compile regex patterns once at module level for better performance
+UPPERCASE_PATTERN = re.compile(r'[A-Z]')
+LOWERCASE_PATTERN = re.compile(r'[a-z]')
+DIGIT_PATTERN = re.compile(r'\d')
+SPECIAL_CHAR_PATTERN = re.compile(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/`~;]')
+
 def validate_password(password: str) -> None:
     """
     Validates password strength and raises HTTPException if invalid.
@@ -30,25 +36,25 @@ def validate_password(password: str) -> None:
             detail="Password must not exceed 128 characters"
         )
     
-    if not re.search(r'[A-Z]', password):
+    if not UPPERCASE_PATTERN.search(password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password must contain at least one uppercase letter"
         )
     
-    if not re.search(r'[a-z]', password):
+    if not LOWERCASE_PATTERN.search(password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password must contain at least one lowercase letter"
         )
     
-    if not re.search(r'\d', password):
+    if not DIGIT_PATTERN.search(password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password must contain at least one number"
         )
     
-    if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/`~;]', password):
+    if not SPECIAL_CHAR_PATTERN.search(password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password must contain at least one special character (!@#$%^&*...)"
