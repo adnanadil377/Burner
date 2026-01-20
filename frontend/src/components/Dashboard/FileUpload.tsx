@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { useAuthStore } from '../../stores/useAuthStore';
+import { api } from '../../services/api';
 
 interface UploadState {
   status: 'idle' | 'requesting' | 'uploading' | 'success' | 'error';
@@ -36,29 +36,15 @@ export const FileUpload = () => {
     error: null,
     uploadedFile: null,
   });
-  
+
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const token = useAuthStore(state => state.token);
 
   /**
    * Step 1: Request presigned URL from your API
    */
   const requestPresignedUrl = async (fileName: string, fileType: string): Promise<PresignedUrlResponse> => {
-    const response = await fetch(`http://127.0.0.1:8000/video/upload?file_name=${fileName}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'content-type': fileType,
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to get upload URL');
-    }
-
-    const data = await response.json();
+    const data = await api.initiateUpload(fileName, fileType);
     console.log("Presigned URL response:", data);
     return data;
   };
@@ -114,7 +100,7 @@ export const FileUpload = () => {
       });
 
       // STEP 1: Request presigned URL
-      const { upload_url, file_key, video_id } = await requestPresignedUrl(
+      const { upload_url, video_id } = await requestPresignedUrl(
         file.name,
         file.type
       );
@@ -122,22 +108,10 @@ export const FileUpload = () => {
       // STEP 2: Upload to R2
       setUploadState(prev => ({ ...prev, status: 'uploading' }));
       await uploadToR2(file, upload_url, file.name);
-// --- NEW STEP 3: Tell Backend to start processing ---
+      // --- NEW STEP 3: Tell Backend to start processing ---
       // This creates the DB row and kicks off the Celery Worker
-      const projectResponse = await fetch('/api/v1/projects/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          r2_key: file_key, // The key you got from Step 1
-          original_filename: file.name
-        })
-      });
+      await api.confirmUpload(video_id);
 
-      if (!projectResponse.ok) throw new Error("Failed to create project");
-      const projectData = await projectResponse.json();
       // Success!
       setUploadState({
         status: 'success',
@@ -165,7 +139,7 @@ export const FileUpload = () => {
         uploadedFile: null,
       });
     }
-  }, [token]);
+  }, []);
 
   /**
    * File input change handler
@@ -253,8 +227,8 @@ export const FileUpload = () => {
           border-2 border-dashed rounded-3xl
           transition-all duration-300 ease-out
           cursor-pointer group
-          ${dragActive 
-            ? 'border-[var(--flame-orange)] bg-[var(--flame-orange)]/10 scale-[1.02]' 
+          ${dragActive
+            ? 'border-[var(--flame-orange)] bg-[var(--flame-orange)]/10 scale-[1.02]'
             : 'border-[var(--text-tertiary)] hover:border-[var(--flame-orange)]/50 bg-[var(--bg-secondary)]'
           }
           ${isUploading ? 'pointer-events-none' : ''}
@@ -275,11 +249,11 @@ export const FileUpload = () => {
             mx-auto w-24 h-24 mb-6 rounded-2xl
             flex items-center justify-center
             transition-all duration-300
-            ${uploadState.status === 'success' 
-              ? 'bg-[var(--success-green)]/20' 
+            ${uploadState.status === 'success'
+              ? 'bg-[var(--success-green)]/20'
               : uploadState.status === 'error'
-              ? 'bg-[var(--flame-red)]/20'
-              : 'bg-[var(--flame-orange)]/10 group-hover:bg-[var(--flame-orange)]/20'
+                ? 'bg-[var(--flame-red)]/20'
+                : 'bg-[var(--flame-orange)]/10 group-hover:bg-[var(--flame-orange)]/20'
             }
           `}>
             {uploadState.status === 'success' ? (
@@ -306,11 +280,11 @@ export const FileUpload = () => {
           <p className={`
             text-xl font-semibold mb-2 transition-colors
             font-['Outfit']
-            ${uploadState.status === 'success' 
-              ? 'text-[var(--success-green)]' 
+            ${uploadState.status === 'success'
+              ? 'text-[var(--success-green)]'
               : uploadState.status === 'error'
-              ? 'text-[var(--flame-red)]'
-              : 'text-[var(--text-primary)]'
+                ? 'text-[var(--flame-red)]'
+                : 'text-[var(--text-primary)]'
             }
           `}>
             {getStatusMessage()}
@@ -327,7 +301,7 @@ export const FileUpload = () => {
           {isUploading && (
             <div className="mt-6 w-full max-w-md mx-auto">
               <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-gradient-to-r from-[var(--flame-orange)] to-[var(--flame-red)] transition-all duration-300 ease-out"
                   style={{ width: `${uploadState.progress}%` }}
                 />

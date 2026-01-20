@@ -115,7 +115,7 @@ const VideoPlayer = ({
   };
   
   return (
-    <div className="relative w-full h-full flex items-center bg-white justify-center overflow-hidden my-4">
+    <div className="relative w-full h-full flex items-center bg-black justify-center overflow-hidden">
       {/* Video Container with aspect ratio */}
       <div 
         className="relative bg-black border-8 border-black overflow-hidden flex-shrink-0"

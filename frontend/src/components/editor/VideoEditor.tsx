@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Type, Palette, Layout, Box, Sparkles, Clock, ChevronLeft, ChevronRight, Monitor } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Type, Palette, Layout, Box, Sparkles, Clock, ChevronLeft, ChevronRight, Monitor, GripHorizontal } from 'lucide-react';
 import VideoPlayer from './VideoPlayer';
 import Timeline from './Timeline';
 import SubtitleDrawer, { type DrawerTab } from './SubtitleDrawer';
@@ -33,6 +33,11 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
   
   // Resolution state
   const [selectedResolution, setSelectedResolution] = useState<VideoResolution | null>(null);
+  
+  // Timeline resize state
+  const [timelineHeight, setTimelineHeight] = useState(224); // 56 * 4 = 224px (default h-56)
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartRef = useRef({ y: 0, height: 0 });
 
   // Handle style change from presets
   const handleStyleChange = (style: CaptionStyle) => {
@@ -43,6 +48,38 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
   const handleResolutionChange = (resolution: VideoResolution) => {
     setSelectedResolution(resolution);
   };
+
+  // Handle timeline resize
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    resizeStartRef.current = {
+      y: e.clientY,
+      height: timelineHeight
+    };
+  };
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaY = resizeStartRef.current.y - e.clientY;
+      const newHeight = Math.min(Math.max(resizeStartRef.current.height + deltaY, 150), 600);
+      setTimelineHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
 
   // Find active subtitle
   const activeSubtitle = subtitles.find(
@@ -177,10 +214,10 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
       />
 
       {/* 2. Middle: Video Player Stage (Flex 1) */}
-      <div className="flex-1 flex flex-col bg-zinc-900 min-w-0">
+      <div className="flex-1 flex flex-col bg-zinc-900 min-w-0 overflow-hidden">
         
         {/* Video Display Area */}
-        <div className="flex-1 relative bg-black">
+        <div className="flex-1 relative bg-black min-h-0">
           {/* Resolution Dropdown Overlay */}
           <div className="absolute top-4 left-4 z-20">
             <ResolutionDropdown
@@ -250,7 +287,19 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
         </div>
 
         {/* Timeline Section */}
-        <div className="h-56 bg-zinc-950 border-t border-zinc-800">
+        <div className="relative bg-zinc-950 border-t border-zinc-800" style={{ height: `${timelineHeight}px` }}>
+          {/* Resize Handle */}
+          <div
+            onMouseDown={handleResizeStart}
+            className={`absolute top-0 left-0 right-0 h-1 cursor-ns-resize group z-20 ${
+              isResizing ? 'bg-lash-900' : 'hover:bg-lash-900/50'
+            } transition-colors`}
+          >
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <GripHorizontal className="w-6 h-6 text-zinc-400" />
+            </div>
+          </div>
+          
           <Timeline
             currentTime={currentTime}
             duration={duration}

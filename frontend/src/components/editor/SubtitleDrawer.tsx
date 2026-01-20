@@ -127,13 +127,13 @@ export default function SubtitleDrawer({
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#050409] border-l border-white/5 m-8 overflow-hidden rounded-xl">
+    <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-white/5">
+      <div className="px-6 py-4 border-b border-zinc-800 flex-shrink-0">
         <div className="flex flex-col gap-1">
           {activeSubtitle && activeTab !== 'timeline' && (
             <>
-              <span className="text-[10px] font-mono text-gray-500">
+              <span className="text-[10px] font-mono text-zinc-500">
                 {formatTime(activeSubtitle.start)} - {formatTime(activeSubtitle.end)}
               </span>
               <span className="text-sm text-white truncate">
@@ -142,7 +142,7 @@ export default function SubtitleDrawer({
             </>
           )}
           {!activeSubtitle && activeTab !== 'timeline' && (
-            <span className="text-sm text-gray-600">No subtitle selected</span>
+            <span className="text-sm text-zinc-600">No subtitle selected</span>
           )}
           {activeTab === 'timeline' && (
             <span className="text-base font-medium text-white">Caption Timeline</span>
@@ -151,7 +151,7 @@ export default function SubtitleDrawer({
       </div>
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {activeTab === 'timeline' ? (
           <CaptionTimeline
             subtitles={subtitles}
@@ -448,23 +448,6 @@ export default function SubtitleDrawer({
           </div>
         )}
       </div>
-
-      {/* Actions Footer */}
-      {activeTab !== 'timeline' && (
-        <div className="px-6 py-4 border-t border-white/5">
-          <button
-            onClick={onSaveChanges}
-            disabled={!activeSubtitleId}
-            className={`w-full py-2.5 rounded-lg text-sm transition-all ${
-              activeSubtitleId
-                ? 'bg-purple-500 hover:bg-purple-600 text-white'
-                : 'bg-[#1A1A28] text-gray-600 cursor-not-allowed'
-            }`}
-          >
-            Apply Changes
-          </button>
-        </div>
-      )}
     </div>
   );
 }

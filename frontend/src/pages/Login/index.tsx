@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/useAuthStore";
+import { api } from "../../services/api";
 
 /**
  * 🎓 ZUSTAND IN ACTION: Login Component
@@ -11,21 +12,21 @@ import { useAuthStore } from "../../stores/useAuthStore";
  * - Other components can access auth state easily
  */
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = "http://localhost:8000";
 
 export default function Login() {
   // Local form state (still use useState for form inputs)
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  
+
   // ✨ ZUSTAND: Select only the state and actions we need
-  const { 
-    isAuthenticated, 
-    login, 
-    setLoading, 
-    setError, 
+  const {
+    isAuthenticated,
+    login,
+    setLoading,
+    setError,
     isLoading,
-    error: authError 
+    error: authError
   } = useAuthStore();
 
   const navigate = useNavigate();
@@ -42,6 +43,29 @@ export default function Login() {
       login(token);
     }
   }, [login]);
+
+  /* ----------------------------------
+     Auto-Restore Session (if cookie exists)
+  -----------------------------------*/
+  useEffect(() => {
+    const initAuth = async () => {
+      // Only try to restore if we're not currently authenticated
+      if (!isAuthenticated) {
+        try {
+          // This will try to refresh the token using the httpOnly cookie
+          // If successful, api.ts will update the store via login()
+          // which will trigger the redirect effect below
+          await api.restoreSession();
+          console.log("Session restored successfully");
+        } catch (error) {
+          // Silent failure - just stay on login page
+          console.log("No valid session found");
+        }
+      }
+    };
+
+    initAuth();
+  }, [isAuthenticated]);
 
   /* --------------------
      Redirect after login
@@ -76,6 +100,7 @@ export default function Login() {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
+        credentials: "include", // Important: include cookies for refresh token
         body: formData.toString(),
       });
 
@@ -87,11 +112,13 @@ export default function Login() {
       console.log("Auth response:", data);
 
       // ✨ ZUSTAND: Use the login action to update global state
+      // Only store access_token in localStorage (refresh token is in httpOnly cookie)
+      localStorage.setItem('access_token', data.access_token);
       login(data.access_token);
     } catch (err) {
       // ✨ ZUSTAND: Use the setError action
-      const errorMessage = (err && typeof err === "object" && "message" in err) 
-        ? (err as Error).message 
+      const errorMessage = (err && typeof err === "object" && "message" in err)
+        ? (err as Error).message
         : "Login failed";
       setError(errorMessage);
       console.error("Auth error:", err);
@@ -121,7 +148,7 @@ export default function Login() {
                 <path d="M8 5v14l11-7z" />
               </svg>
             </button>
-            
+
             {/* Optional: Video thumbnail overlay */}
             <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-blue-500/5"></div>
           </div>

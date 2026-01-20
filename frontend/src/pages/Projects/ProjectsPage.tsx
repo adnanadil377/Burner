@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { Folder, MoreVertical, Calendar } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Folder, MoreVertical, Calendar, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Modal from '../../components/ui/Modal';
 import { FileUpload } from '../../components/Dashboard/FileUpload';
+import { api, type Video } from '../../services/api';
 
 /**
  * Projects Page
@@ -9,25 +11,33 @@ import { FileUpload } from '../../components/Dashboard/FileUpload';
  * Browse and manage all video projects
  */
 export default function ProjectsPage() {
-  // Mock data - replace with real data from your backend
-  const projects = [
-    {
-      id: 1,
-      name: 'Summer Vacation 2025',
-      thumbnail: null,
-      updatedAt: '2025-12-10',
-      duration: '3:45'
-    },
-    {
-      id: 2,
-      name: 'Product Demo',
-      thumbnail: null,
-      updatedAt: '2025-12-08',
-      duration: '2:15'
-    }
-  ];
-
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchVideos();
+  }, []);
+
+  const fetchVideos = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await api.getUserVideos();
+      setVideos(response.all_video || []);
+    } catch (err) {
+      console.error('Error fetching videos:', err);
+      setError('Failed to load videos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVideoClick = (video: Video) => {
+    navigate(`/editor?videoId=${video.id}`);
+  };
 
   return (
     <div className="p-8">
@@ -68,18 +78,33 @@ export default function ProjectsPage() {
         </Modal>
 
         {/* Projects Grid */}
-        {projects.length > 0 ? (
+        {loading ? (
+          <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-12 text-center">
+            <Loader2 size={48} className="text-sky-500 mx-auto mb-4 animate-spin" />
+            <h3 className="text-white font-semibold mb-2">Loading videos...</h3>
+          </div>
+        ) : error ? (
+          <div className="bg-neutral-900 rounded-xl border border-red-800 p-12 text-center">
+            <p className="text-red-400 mb-4">{error}</p>
+            <button
+              onClick={fetchVideos}
+              className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg transition"
+            >
+              Retry
+            </button>
+          </div>
+        ) : videos.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {projects.map(project => (
-              <ProjectCard key={project.id} project={project} />
+            {videos.map(video => (
+              <VideoCard key={video.id} video={video} onClick={() => handleVideoClick(video)} />
             ))}
           </div>
         ) : (
           <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-12 text-center">
             <Folder size={48} className="text-neutral-600 mx-auto mb-4" />
-            <h3 className="text-white font-semibold mb-2">No projects yet</h3>
+            <h3 className="text-white font-semibold mb-2">No videos yet</h3>
             <p className="text-neutral-400">
-              Create your first project to get started
+              Upload your first video to get started
             </p>
           </div>
         )}
@@ -88,40 +113,46 @@ export default function ProjectsPage() {
   );
 }
 
-interface Project {
-  id: number;
-  name: string;
-  thumbnail: string | null;
-  updatedAt: string;
-  duration: string;
-}
+function VideoCard({ video, onClick }: { video: Video; onClick: () => void }) {
+  const statusColors: Record<string, string> = {
+    PENDING: 'text-yellow-400 bg-yellow-400/10',
+    COMPLETED: 'text-green-400 bg-green-400/10',
+    PROCESSING: 'text-blue-400 bg-blue-400/10',
+    FAILED: 'text-red-400 bg-red-400/10',
+  };
 
-function ProjectCard({ project }: { project: Project }) {
+  const statusColor = statusColors[video.status] || 'text-neutral-400 bg-neutral-400/10';
+
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden hover:border-amber-500/50 transition-all group cursor-pointer">
+    <div 
+      onClick={onClick}
+      className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden hover:border-sky-500/50 hover:shadow-lg hover:shadow-sky-500/10 transition-all group cursor-pointer"
+    >
       {/* Thumbnail */}
-      <div className="aspect-video bg-neutral-800 flex items-center justify-center">
-        {project.thumbnail ? (
-          <img src={project.thumbnail} alt={project.name} className="w-full h-full object-cover" />
-        ) : (
-          <Folder size={48} className="text-neutral-600" />
-        )}
+      <div className="aspect-video bg-gradient-to-br from-neutral-800 to-neutral-900 flex items-center justify-center relative overflow-hidden">
+        <Folder size={48} className="text-neutral-600 group-hover:text-sky-500 transition-colors" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
       </div>
       
       {/* Info */}
       <div className="p-4">
         <div className="flex items-start justify-between mb-2">
-          <h3 className="text-white font-medium line-clamp-1">{project.name}</h3>
-          <button className="p-1 hover:bg-neutral-800 rounded transition-colors">
+          <h3 className="text-white font-medium line-clamp-1 flex-1">{video.original_name}</h3>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              // Add menu logic here
+            }}
+            className="p-1 hover:bg-neutral-800 rounded transition-colors ml-2"
+          >
             <MoreVertical size={16} className="text-neutral-400" />
           </button>
         </div>
-        <div className="flex items-center gap-4 text-xs text-neutral-400">
-          <span className="flex items-center gap-1">
-            <Calendar size={12} />
-            {new Date(project.updatedAt).toLocaleDateString()}
+        <div className="flex items-center gap-2">
+          <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor}`}>
+            {video.status}
           </span>
-          <span>{project.duration}</span>
+          <span className="text-xs text-neutral-500">ID: {video.id}</span>
         </div>
       </div>
     </div>
