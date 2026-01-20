@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     REDIS_URL: str
     GEMINI_API_KEY: str
-    GEMINI_MODEL: str = "gemini-3-flash-preview"  # Default Gemini model
+    GEMINI_MODEL: str = "gemini-flash-latest"  # Default Gemini model
     PRESIGNED_URL_EXPIRATION: int = 3600  # 1 hour in seconds
     
     # Email address used as the sender for outbound application emails

@@ -2,6 +2,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from models.video import Video
+from models.transcription import Transcription
 from db.session import get_db
 from controller.video_upload_controller import (
     call_celery_audio,
@@ -16,6 +17,11 @@ from schemas.video import (
     PresignedUploadResponse, 
     DownloadUrlResponse, 
     VideoCompletionResponse
+)
+from schemas.transcription import (
+    TranscriptionResponse, 
+    TranscriptionUpdate, 
+    TranscriptionUpdateResponse
 )
 
 router = APIRouter()
@@ -78,15 +84,124 @@ def transcribe(
         )
     
     # Verify video exists and belongs to the user
-    s3_key = db.query(Video).filter(
+    video = db.query(Video).filter(
         Video.id == video_id,
         Video.user_id == user.id
     ).first()
     
-    if not s3_key:
+    if not video:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Video not found or you don't have permission to access it"
         )
     
-    return call_celery_audio(user, s3_key.s3_key)
+    return call_celery_audio(user, video.s3_key, video_id, db)
+
+
+@router.get("/transcription/{video_id}", response_model=TranscriptionResponse)
+def get_transcription(
+    video_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """Get the transcription for a specific video."""
+    # Verify video exists and belongs to the user
+    video = db.query(Video).filter(
+        Video.id == video_id,
+        Video.user_id == user.id
+    ).first()
+    
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found or you don't have permission to access it"
+        )
+    
+    # Get the transcription
+    transcription = db.query(Transcription).filter(
+        Transcription.video_id == video_id
+    ).first()
+    
+    if not transcription:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transcription not found for this video"
+        )
+    
+    return transcription
+
+
+@router.put("/transcription/{video_id}", response_model=TranscriptionUpdateResponse)
+def update_transcription(
+    video_id: int,
+    transcription_data: TranscriptionUpdate,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """Update the transcription/subtitles for a specific video."""
+    # Verify video exists and belongs to the user
+    video = db.query(Video).filter(
+        Video.id == video_id,
+        Video.user_id == user.id
+    ).first()
+    
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found or you don't have permission to access it"
+        )
+    
+    # Get the transcription
+    transcription = db.query(Transcription).filter(
+        Transcription.video_id == video_id
+    ).first()
+    
+    if not transcription:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transcription not found for this video"
+        )
+    
+    # Update the subtitles
+    transcription.subtitles = [sub.model_dump() for sub in transcription_data.subtitles]
+    transcription.status = "COMPLETED"
+    
+    db.commit()
+    db.refresh(transcription)
+    
+    return {
+        "message": "Transcription updated successfully",
+        "transcription": transcription
+    }
+
+
+@router.post("/transcription/{video_id}/regenerate")
+def regenerate_transcription(
+    video_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """Regenerate the transcription for a specific video."""
+    # Verify video exists and belongs to the user
+    video = db.query(Video).filter(
+        Video.id == video_id,
+        Video.user_id == user.id
+    ).first()
+    
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found or you don't have permission to access it"
+        )
+    
+    # Delete existing transcription if it exists
+    existing_transcription = db.query(Transcription).filter(
+        Transcription.video_id == video_id
+    ).first()
+    
+    if existing_transcription:
+        db.delete(existing_transcription)
+        db.commit()
+    
+    # Trigger new transcription task
+    return call_celery_audio(user, video.s3_key, video_id, db)

@@ -32,17 +32,31 @@ def get_s3_client():
         config=Config(signature_version="s3v4")
     )
 
-def call_celery_audio(user: User, s3_key: str) -> dict:
+def call_celery_audio(user: User, s3_key: str, video_id: int, db: Session) -> dict:
     """Trigger Celery task to extract audio and transcribe video.
     
     Args:
         user: The authenticated user
         s3_key: The S3 key of the video file
+        video_id: The ID of the video in the database
+        db: Database session
         
     Returns:
         dict: Task information
     """
     try:
+        # Verify the video belongs to the user
+        video = db.query(Video).filter(
+            Video.id == video_id,
+            Video.user_id == user.id
+        ).first()
+        
+        if not video:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Video not found or unauthorized"
+            )
+        
         # Generate presigned URL for the video
         s3_client = get_s3_client()
         presigned_url = s3_client.generate_presigned_url(
@@ -54,12 +68,13 @@ def call_celery_audio(user: User, s3_key: str) -> dict:
             ExpiresIn=PRESIGNED_URL_EXPIRATION
         )
         
-        # Trigger the Celery task
-        task = extract_audio_and_transcribe.delay(presigned_url)
+        # Trigger the Celery task with video_id
+        task = extract_audio_and_transcribe.delay(presigned_url, video_id)
         
         return {
             "message": "Transcription task started",
-            "task_id": task.id
+            "task_id": task.id,
+            "video_id": video_id
         }
     except ClientError as e:
         error_code = getattr(e, "response", {}).get("Error", {}).get("Code", "Unknown")

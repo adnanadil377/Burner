@@ -3,6 +3,7 @@ from api import auth
 from api import video_upload
 from db import base, session
 from fastapi.middleware.cors import CORSMiddleware
+from models import User, Video, Transcription  # Import all models
 
 base.Base.metadata.create_all(bind=session.engine)
 
