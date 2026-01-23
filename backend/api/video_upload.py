@@ -8,8 +8,18 @@ from controller.video_upload_controller import (
     call_celery_audio,
     create_presigned_download_url, 
     initiate_video_upload, 
-    confirm_upload
+    initiate_video_upload, 
+    confirm_upload,
+    burn_video
 )
+from celery.result import AsyncResult
+from core.celery_app import celery_app
+from fastapi.responses import FileResponse
+import os
+from celery.result import AsyncResult
+from core.celery_app import celery_app
+from fastapi.responses import FileResponse
+import os
 from models.user import User
 from dependency import get_current_user
 from sqlalchemy.orm import Session
@@ -205,3 +215,51 @@ def regenerate_transcription(
     
     # Trigger new transcription task
     return call_celery_audio(user, video.s3_key, video_id, db)
+
+@router.post("/burn/{video_id}")
+def burn_captions(
+    video_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """Start the process of burning animated captions into the video."""
+    return burn_video(user, video_id, db)
+
+@router.get("/burn/{task_id}/status")
+def get_burn_status(task_id: str, user: Annotated[User, Depends(get_current_user)]):
+    """Check the status of the burning task."""
+    task_result = AsyncResult(task_id, app=celery_app)
+    
+    if task_result.state == 'PENDING':
+        return {"status": "PENDING"}
+    elif task_result.state == 'FAILURE':
+        return {"status": "FAILURE", "error": str(task_result.result)}
+    elif task_result.state == 'SUCCESS':
+        # The task returns a dict with 'output_video' path relative to backend root (?)
+        # task_result.result is the return value of the function
+        result = task_result.result
+        return {
+            "status": "SUCCESS", 
+            "output_video": result.get("output_video"),
+            "download_endpoint": f"/video/download-burned/{os.path.basename(result.get('output_video'))}" 
+        }
+    
+    return {"status": task_result.state}
+
+@router.get("/download-burned/{filename}")
+def download_burned_video(filename: str):
+    """Serve the burned video file."""
+    # Security: Ensure filename is just a filename, not a path
+    if "/" in filename or "\\" in filename or ".." in filename:
+         raise HTTPException(status_code=400, detail="Invalid filename")
+         
+    file_path = filename # Files are in root of backend currently
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found or expired")
+        
+    return FileResponse(
+        file_path, 
+        media_type="video/mp4", 
+        filename=f"burned_{filename}"
+    )

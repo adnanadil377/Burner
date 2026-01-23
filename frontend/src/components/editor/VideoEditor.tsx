@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Type, Palette, Layout, Box, Sparkles, Clock, ChevronLeft, ChevronRight, Monitor, GripHorizontal } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Type, Palette, Layout, Box, Sparkles, Clock, ChevronLeft, ChevronRight, Monitor, GripHorizontal, Loader2 } from 'lucide-react';
 import VideoPlayer from './VideoPlayer';
 import Timeline from './Timeline';
 import SubtitleDrawer, { type DrawerTab } from './SubtitleDrawer';
@@ -13,27 +13,29 @@ interface VideoEditorProps {
   videoUrl: string;
   subtitles: Subtitle[];
   onSubtitlesChange?: (subtitles: Subtitle[]) => void;
+  onExport?: () => void;
+  exportLoading?: boolean;
 }
 
 
-const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange }: VideoEditorProps) => {
+const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange, onExport, exportLoading = false }: VideoEditorProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [subtitles, setSubtitles] = useState<Subtitle[]>(initialSubtitles);
   const [activeSubtitleId, setActiveSubtitleId] = useState<string | null>(null);
-  
+
   // UI State
   const [activeDrawerTab, setActiveDrawerTab] = useState<DrawerTab>('text');
-  
+
   // Style controls - use full CaptionStyle
   const [currentStyle, setCurrentStyle] = useState<CaptionStyle>(captionPresets[0]);
   const [transcriptText, setTranscriptText] = useState('');
-  
+
   // Resolution state
   const [selectedResolution, setSelectedResolution] = useState<VideoResolution | null>(null);
-  
+
   // Timeline resize state
   const [timelineHeight, setTimelineHeight] = useState(224); // 56 * 4 = 224px (default h-56)
   const [isResizing, setIsResizing] = useState(false);
@@ -43,7 +45,7 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
   const handleStyleChange = (style: CaptionStyle) => {
     setCurrentStyle(style);
   };
-  
+
   // Handle resolution change
   const handleResolutionChange = (resolution: VideoResolution) => {
     setSelectedResolution(resolution);
@@ -168,7 +170,7 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
 
   const handleSaveChanges = () => {
     if (activeSubtitleId && transcriptText) {
-      const updatedSubtitles = subtitles.map(sub => 
+      const updatedSubtitles = subtitles.map(sub =>
         sub.id === activeSubtitleId ? { ...sub, text: transcriptText } : sub
       );
       setSubtitles(updatedSubtitles);
@@ -202,9 +204,9 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
 
   return (
     <div className="h-screen w-full flex bg-zinc-950 overflow-hidden">
-      
+
       {/* 1. Far Left: Navigation/Selector Sidebar */}
-      <EditorSidebar 
+      <EditorSidebar
         activeTab={activeDrawerTab}
         onTabChange={setActiveDrawerTab}
         onNavigatePrev={navigateToPrevSubtitle}
@@ -215,7 +217,7 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
 
       {/* 2. Middle: Video Player Stage (Flex 1) */}
       <div className="flex-1 flex flex-col bg-zinc-900 min-w-0 overflow-hidden">
-        
+
         {/* Video Display Area */}
         <div className="flex-1 relative bg-black min-h-0">
           {/* Resolution Dropdown Overlay */}
@@ -225,7 +227,7 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
               onSelectResolution={handleResolutionChange}
             />
           </div>
-          
+
           <VideoPlayer
             videoUrl={videoUrl}
             currentTime={currentTime}
@@ -239,7 +241,7 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
 
           {/* Center Play/Pause Overlay */}
           {!isPlaying && (
-            <div 
+            <div
               className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer transition-opacity hover:bg-black/30"
               onClick={togglePlayPause}
             >
@@ -259,7 +261,7 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
             >
               <SkipBack className="w-5 h-5" />
             </button>
-            
+
             <button
               onClick={togglePlayPause}
               className="p-3 rounded-lg bg-lash-900 hover:bg-lash-800 transition-all hover:scale-105 shadow-lg shadow-lash-800/30"
@@ -270,7 +272,7 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
                 <Play className="w-6 h-6 text-white" fill="white" />
               )}
             </button>
-            
+
             <button
               onClick={skipForward}
               className="p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-white"
@@ -284,6 +286,26 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
           </div>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onExport}
+              disabled={exportLoading}
+              className="bg-sky-500 hover:bg-sky-600 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exportLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <Monitor className="w-4 h-4" />
+                  Export Video
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Timeline Section */}
@@ -291,15 +313,14 @@ const VideoEditor = ({ videoUrl, subtitles: initialSubtitles, onSubtitlesChange 
           {/* Resize Handle */}
           <div
             onMouseDown={handleResizeStart}
-            className={`absolute top-0 left-0 right-0 h-1 cursor-ns-resize group z-20 ${
-              isResizing ? 'bg-lash-900' : 'hover:bg-lash-900/50'
-            } transition-colors`}
+            className={`absolute top-0 left-0 right-0 h-1 cursor-ns-resize group z-20 ${isResizing ? 'bg-lash-900' : 'hover:bg-lash-900/50'
+              } transition-colors`}
           >
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
               <GripHorizontal className="w-6 h-6 text-zinc-400" />
             </div>
           </div>
-          
+
           <Timeline
             currentTime={currentTime}
             duration={duration}

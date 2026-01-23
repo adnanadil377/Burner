@@ -1,6 +1,7 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
-from tasks.video_tasks import extract_audio_and_transcribe
+from tasks.video_tasks import extract_audio_and_transcribe, burn_animated_caption
+from models.transcription import Transcription
 from models.video import Video
 from models.user import User
 import boto3
@@ -247,4 +248,59 @@ def confirm_upload(db: Session, video_id: int, user: User) -> dict:
     db.commit()
     db.refresh(video)
     logger.info(f"Upload confirmed for video {video_id}")
+    logger.info(f"Upload confirmed for video {video_id}")
     return {"message": "Upload verified and completed", "video": video}
+
+def burn_video(user: User, video_id: int, db: Session) -> dict:
+    """Trigger Celery task to burn animated captions into the video."""
+    
+    # 1. Fetch Video
+    video = db.query(Video).filter(Video.id == video_id, Video.user_id == user.id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+        
+    # 2. Fetch Transcription
+    transcription = db.query(Transcription).filter(Transcription.video_id == video_id).first()
+    if not transcription or not transcription.subtitles:
+        raise HTTPException(status_code=400, detail="No subtitles found for this video")
+
+    # 3. Generate Presigned URL for input
+    s3_client = get_s3_client()
+    try:
+        presigned_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': R2_BUCKET_NAME, 'Key': video.s3_key},
+            ExpiresIn=PRESIGNED_URL_EXPIRATION
+        )
+    except ClientError as e:
+        logger.error(f"S3 Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to access video file")
+
+    # 4. Transform Subtitles for Skia Renderer
+    # The renderer expects a specific format. 
+    # Current formatting in DB is: {"id": "sub-1", "start": 0.0, "end": 1.0, "text": "foo"}
+    # We can enrich this with default styles here or let the renderer/task handle defaults.
+    # Let's pass the DB subtitles directly, enabling the renderer (or task) to apply defaults.
+    
+    # However, let's inject a default style if missing to ensure it looks good immediately.
+    enriched_subtitles = []
+    for sub in transcription.subtitles:
+        # Create a copy
+        s = sub.copy()
+        if "style" not in s:
+            s["style"] = {
+                "fontSize": 48,
+                "fontFamily": "Arial",
+                "color": "#FFFFFF",
+                "position": {"x": 0.5, "y": 0.85},
+                # We can add animation instructions here too
+            }
+        enriched_subtitles.append(s)
+
+    # 5. Call Celery Task
+    task = burn_animated_caption.delay(presigned_url, enriched_subtitles)
+    
+    return {
+        "message": "Burning process started",
+        "task_id": task.id
+    }

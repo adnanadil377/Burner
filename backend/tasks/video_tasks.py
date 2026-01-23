@@ -11,6 +11,7 @@ from google import genai
 from core.config import settings
 from db.session import SessionLocal
 from models.transcription import Transcription
+from utils.skia_renderer import VideoTextRenderer
 
 logger = logging.getLogger(__name__)
 api_key = settings.GEMINI_API_KEY
@@ -65,6 +66,43 @@ def burn_caption(get_presigned_url, subtitles):
 
     except subprocess.CalledProcessError as e:
         logger.error(f"FFmpeg error: {e.stderr or e.stdout or 'Unknown error'}")
+        raise e
+
+@celery_app.task
+def burn_animated_caption(get_presigned_url, subtitles_json):
+    """Burn animated subtitles into a video file using Skia.
+    
+    Args:
+        get_presigned_url: Presigned URL to download the video
+        subtitles_json: List of style-enriched subtitles
+        
+    Returns:
+        dict: Task result with output video path
+    """
+    try:
+        input_path = get_presigned_url
+        output_path = f"animated_subtitled_{uuid.uuid4().hex[:8]}.mp4"
+        
+        # Initialize Renderer
+        # Verify strict structure or loose structure? 
+        # subtitles_json is expected to be a list of dicts.
+        
+        renderer = VideoTextRenderer(
+            input_path=str(input_path),
+            output_path=output_path,
+            subtitles=subtitles_json
+        )
+        
+        renderer.render()
+        
+        return {
+            "status": "completed",
+            "original_video": str(input_path),
+            "output_video": str(output_path),
+        }
+
+    except Exception as e:
+        logger.error(f"Skia Rendering error: {str(e)}")
         raise e
 
 class subtitle(BaseModel):
