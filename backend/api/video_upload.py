@@ -1,17 +1,17 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from utils.s3_initial import create_presigned_download_url, initiate_video_upload
 from schemas.burn import Style
 from models.video import Video
 from models.transcription import Transcription
 from db.session import get_db
 from controller.video_upload_controller import (
     burn_video,
-    call_celery_audio,
-    create_presigned_download_url, 
-    initiate_video_upload, 
+    call_celery_audio,  
     confirm_upload
 )
+
 from models.user import User
 from dependency import get_current_user
 from sqlalchemy.orm import Session

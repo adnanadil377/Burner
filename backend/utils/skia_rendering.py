@@ -10,9 +10,10 @@ logger = logging.getLogger(__name__)
 
 
 class VideoTextRenderer:
-    def __init__(self, input_url:str, output_url:str, style:Style,subtitles:list):
+    def __init__(self, input_url:str, upload_url:str, style:Style,subtitles:list,output_path:str):
         self.input_url = input_url
-        self.output_url = output_url
+        self.upload_url = upload_url
+        self.output_path = output_path
         self.style = style
         self.subtitles = subtitles
         self.width = 0
@@ -91,7 +92,7 @@ class VideoTextRenderer:
              # We need to map audio from the ORIGINAL file.
             "-map", "0:v", # Map video from stdin (index 0)
             "-map", "1:a?", # Map audio from original file (will be index 1 provided as input)
-            self.output_url
+            self.output_path
         ]
 
         # We need to pass the original file as a second input to the encoder for audio mapping
@@ -112,7 +113,7 @@ class VideoTextRenderer:
             "-preset", "fast",
             "-crf", "23",
             "-c:a", "aac",         # Re-encode audio to aac to be safe, or copy
-            self.output_url
+            self.output_path
         ]
 
         logger.info(f"Starting decoding: {' '.join(decoder_cmd)}")
@@ -193,13 +194,13 @@ class VideoTextRenderer:
             logger.info("Render finished.")
 
 
-    def draw_subtitles(self, canvas, current_time, style: Style):
+    def draw_subtitles(self, canvas, current_time, style: dict):
         """Draw active subtitles on the canvas with progressive highlighting."""
-        font_size = style.font_size
-        font_family = style.font_family
-        font_weight = style.font_weight
-        font_color = style.font_color
-        font_position = style.position
+        font_size = style.get("font_size")
+        font_family = style.get("font_family")
+        font_weight = style.get("font_weight")
+        font_color = style.get("font_color")
+        font_position = style.get("font_position")
         
         # 1. Setup basic Font
         font = skia.Font(skia.Typeface(font_family), font_size)
@@ -239,8 +240,8 @@ class VideoTextRenderer:
 
                 # Override with user position if provided
                 if font_position:
-                    start_x = font_position.x * self.width - (total_text_width / 2)
-                    y = font_position.y * self.height
+                    start_x = font_position.get("x") * self.width - (total_text_width / 2)
+                    y = font_position.get("y") * self.height
 
                 # --- DRAWING LOOP ---
 

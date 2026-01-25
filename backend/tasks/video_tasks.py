@@ -7,7 +7,9 @@ import json
 
 from pydantic import BaseModel, Field
 from requests import Session
-from controller.video_upload_controller import initiate_video_upload
+
+from utils.upload_r2 import upload_to_r2
+from utils.s3_initial import initiate_video_upload
 from models.user import User
 from utils.skia_rendering import VideoTextRenderer
 from schemas.burn import Style
@@ -185,47 +187,136 @@ def extract_audio_and_transcribe(presigned_url, video_id: int):
                 logger.warning(f"Failed to delete temporary audio file {audio_output}: {e}")
         db.close()
 
-@celery_app.task
-def burn_animated_caption(
-    get_presigned_url, 
-    subtitles_json:SubtitleListResponse, 
-    style:Style,
-    user:User,
-    db:Session
-):
-    """Burn animated subtitles into a video file using Skia.
+# @celery_app.task
+# def burn_animated_caption(
+#     get_presigned_url, 
+#     subtitles_json:SubtitleListResponse, 
+#     style:Style,
+#     user:User,
+#     db:Session
+# ):
+#     """Burn animated subtitles into a video file using Skia.
     
-    Args:
-        get_presigned_url: Presigned URL to download the video
-        subtitles_json: List of style-enriched subtitles
+#     Args:
+#         get_presigned_url: Presigned URL to download the video
+#         subtitles_json: List of style-enriched subtitles
         
-    Returns:
-        dict: Task result with output video path
-    """
-    try:
-        input_url = get_presigned_url
-        output_filename = f"animated_subtitled_{uuid.uuid4().hex[:8]}.mp4"
-        output_url=initiate_video_upload(user, output_filename, db)
-        # Initialize Renderer
-        # Verify strict structure or loose structure? 
-        # subtitles_json is expected to be a list of dicts.
+#     Returns:
+#         dict: Task result with output video path
+#     """
+#     try:
+#         input_url = get_presigned_url
+#         output_filename = f"animated_subtitled_{uuid.uuid4()}.mp4"
+#         upload_url=initiate_video_upload(user, output_filename, db)
+#         # Initialize Renderer
+#         # Verify strict structure or loose structure? 
+#         # subtitles_json is expected to be a list of dicts.
 
+#         renderer = VideoTextRenderer(
+#             input_url=str(input_url),
+#             upload_url=str(upload_url.get("upload_url","")),
+#             style=style,
+#             subtitles=subtitles_json,
+#         )
+
+#         renderer.render(output_path="/tmp/output.mp4")
+
+#         return {
+#             "status": "completed",
+#             "original_video": str(input_url),
+#             "output_video": str(upload_url.get("upload_url","")),
+#         }
+
+#     except Exception as e:
+#         logger.error(f"Skia Rendering error: {str(e)}")
+#         raise
+    
+@celery_app.task(bind=True)
+def burn_animated_caption(
+    self,
+    get_presigned_url,
+    subtitles_json: SubtitleListResponse,
+    style: dict,
+    output_filename:str,
+    upload_info:dict
+):
+    try:
+        # 1️⃣ Resolve input_url (Handle dict or JSON string)
+        if isinstance(get_presigned_url, dict):
+            input_url = get_presigned_url.get("download_url")
+        elif isinstance(get_presigned_url, str):
+            try:
+                # Check if it's a JSON string representing the dict
+                parsed_url_data = json.loads(get_presigned_url)
+                if isinstance(parsed_url_data, dict) and "download_url" in parsed_url_data:
+                    input_url = parsed_url_data["download_url"]
+                else:
+                    input_url = get_presigned_url
+            except (json.JSONDecodeError, TypeError):
+                # Fallback: Treat as direct URL string (checking for Python dict string repr)
+                if get_presigned_url.startswith("{") and "'download_url':" in get_presigned_url:
+                     import ast
+                     try:
+                        input_url = ast.literal_eval(get_presigned_url).get("download_url")
+                     except:
+                        input_url = get_presigned_url
+                else:
+                    input_url = get_presigned_url
+        else:
+            input_url = str(get_presigned_url)
+
+        # 2️⃣ Resolve upload_info (Flexible handling)
+        upl_url = None
+        out_key = None
+        out_public_url = None
+        
+        if isinstance(upload_info, dict):
+            upl_url = upload_info.get("upload_url")
+            out_key = upload_info.get("file_key") or upload_info.get("key")
+            out_public_url = upload_info.get("public_url")
+        elif isinstance(upload_info, str):
+            # Try parsing as JSON first if it looks like JSON
+            if upload_info.strip().startswith("{"):
+                try:
+                    parsed_info = json.loads(upload_info)
+                    if isinstance(parsed_info, dict):
+                        upl_url = parsed_info.get("upload_url")
+                        out_key = parsed_info.get("file_key") or parsed_info.get("key")
+                        out_public_url = parsed_info.get("public_url")
+                    else:
+                        upl_url = upload_info
+                except json.JSONDecodeError:
+                    # Not valid JSON, treat as raw URL string
+                    upl_url = upload_info
+            else:
+                # It's a raw string (the URL itself)
+                upl_url = upload_info
+        
+        if not upl_url:
+             raise ValueError(f"Could not extract upload_url. Payload: {upload_info}")
+
+        output_path = f"/tmp/{output_filename}"
+        
+        # 3️⃣ Render locally
         renderer = VideoTextRenderer(
-            input_url=str(input_url),
-            output_url=output_url,
+            upload_url=upl_url,  # optional now
+            input_url=input_url,
             style=style,
             subtitles=subtitles_json,
-            outputurl=str(output_url.get("upload_url",""))
+            output_path=output_path
         )
 
         renderer.render()
+        
+        # 4️⃣ Upload from Celery worker
+        upload_to_r2(upl_url, output_path)
 
         return {
             "status": "completed",
-            "original_video": str(input_url),
-            "output_video": str(output_url.get("upload_url","")),
+            "output_key": out_key,
+            "output_url": out_public_url,
         }
 
     except Exception as e:
-        logger.error(f"Skia Rendering error: {str(e)}")
-        raise e
+        logger.exception("Skia rendering or upload failed")
+        raise
