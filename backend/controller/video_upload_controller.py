@@ -1,6 +1,8 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
-from tasks.video_tasks import extract_audio_and_transcribe
+from models.transcription import Transcription
+from schemas.burn import Style
+from tasks.video_tasks import burn_animated_caption, extract_audio_and_transcribe
 from models.video import Video
 from models.user import User
 import boto3
@@ -248,3 +250,24 @@ def confirm_upload(db: Session, video_id: int, user: User) -> dict:
     db.refresh(video)
     logger.info(f"Upload confirmed for video {video_id}")
     return {"message": "Upload verified and completed", "video": video}
+
+
+def burn_video(
+    video_id:int,
+    style:Style,
+    user:User,
+    db: Session,
+):
+    if not video_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Video id not found")
+    file_name=db.query(Video).filter(Video.id == video_id).first()
+    if not file_name:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Video not found")
+    presigned_url=create_presigned_download_url(user, file_name.s3_key, db)
+    subtitles = db.query(Transcription).filter(Transcription.video_id==video_id).first()
+    if not subtitles:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Generate subtitles first")
+    subtitles_json=subtitles.subtitles
+    burn_animated_caption.delay(presigned_url,subtitles_json,style,user,db)
+    
+    

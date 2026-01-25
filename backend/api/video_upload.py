@@ -1,10 +1,12 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from schemas.burn import Style
 from models.video import Video
 from models.transcription import Transcription
 from db.session import get_db
 from controller.video_upload_controller import (
+    burn_video,
     call_celery_audio,
     create_presigned_download_url, 
     initiate_video_upload, 
@@ -205,3 +207,13 @@ def regenerate_transcription(
     
     # Trigger new transcription task
     return call_celery_audio(user, video.s3_key, video_id, db)
+
+
+@router.post("/burn/{video_id}")
+def burn_caption(
+    video_id:int,
+    style:Style,
+    user:Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    return burn_video(video_id,style,user,db)

@@ -6,6 +6,12 @@ import logging
 import json
 
 from pydantic import BaseModel, Field
+from requests import Session
+from controller.video_upload_controller import initiate_video_upload
+from models.user import User
+from utils.skia_rendering import VideoTextRenderer
+from schemas.burn import Style
+from schemas.transcription import SubtitleListResponse
 from core.celery_app import celery_app
 from google import genai
 from core.config import settings
@@ -67,15 +73,6 @@ def burn_caption(get_presigned_url, subtitles):
         logger.error(f"FFmpeg error: {e.stderr or e.stdout or 'Unknown error'}")
         raise e
 
-class subtitle(BaseModel):
-    id: int = Field(description="id of a part of a subtitles")
-    start: float = Field(description="start time in seconds in two decimal")
-    end: float = Field(description="end time in seconds in two decimal")
-    text: str = Field(description="trascribed section in that time frame of the subtitle and maximum of 4 words")
-
-class FullSubtitle(BaseModel):
-    subtitle: List[subtitle]
-
 
 @celery_app.task
 def extract_audio_and_transcribe(presigned_url, video_id: int):
@@ -117,7 +114,7 @@ def extract_audio_and_transcribe(presigned_url, video_id: int):
             contents=[prompt, audio_file],
             config={
                 "response_mime_type": "application/json",
-                "response_json_schema": FullSubtitle.model_json_schema(),
+                "response_json_schema": SubtitleListResponse.model_json_schema(),
             },
         )
 
@@ -187,3 +184,48 @@ def extract_audio_and_transcribe(presigned_url, video_id: int):
             except OSError as e:
                 logger.warning(f"Failed to delete temporary audio file {audio_output}: {e}")
         db.close()
+
+@celery_app.task
+def burn_animated_caption(
+    get_presigned_url, 
+    subtitles_json:SubtitleListResponse, 
+    style:Style,
+    user:User,
+    db:Session
+):
+    """Burn animated subtitles into a video file using Skia.
+    
+    Args:
+        get_presigned_url: Presigned URL to download the video
+        subtitles_json: List of style-enriched subtitles
+        
+    Returns:
+        dict: Task result with output video path
+    """
+    try:
+        input_url = get_presigned_url
+        output_filename = f"animated_subtitled_{uuid.uuid4().hex[:8]}.mp4"
+        output_url=initiate_video_upload(user, output_filename, db)
+        # Initialize Renderer
+        # Verify strict structure or loose structure? 
+        # subtitles_json is expected to be a list of dicts.
+
+        renderer = VideoTextRenderer(
+            input_url=str(input_url),
+            output_url=output_url,
+            style=style,
+            subtitles=subtitles_json,
+            outputurl=str(output_url.get("upload_url",""))
+        )
+
+        renderer.render()
+
+        return {
+            "status": "completed",
+            "original_video": str(input_url),
+            "output_video": str(output_url.get("upload_url","")),
+        }
+
+    except Exception as e:
+        logger.error(f"Skia Rendering error: {str(e)}")
+        raise e
