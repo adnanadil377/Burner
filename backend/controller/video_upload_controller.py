@@ -298,7 +298,7 @@ def burn_video(user: User, video_id: int, db: Session) -> dict:
         enriched_subtitles.append(s)
 
     # 5. Call Celery Task
-    task = burn_animated_caption.delay(presigned_url, enriched_subtitles)
+    task = burn_animated_caption.delay(video_id, str(user.id), presigned_url, enriched_subtitles)
     
     return {
         "message": "Burning process started",

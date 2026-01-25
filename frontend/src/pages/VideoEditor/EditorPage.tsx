@@ -215,18 +215,17 @@ export default function EditorPage() {
                 try {
                     const status = await api.getBurnStatus(task_id);
 
-                    if (status.status === 'SUCCESS' && status.download_endpoint) {
+                    if (status.status === 'SUCCESS' && status.download_url) {
                         clearInterval(burnPollInterval);
                         setExportLoading(false);
 
-                        // Trigger download
-                        // Construct absolute URL for the download
-                        const downloadUrl = `http://localhost:8000${status.download_endpoint}`;
-
-                        // Create temporary link to trigger download
+                        // Trigger download using the presigned URL
                         const link = document.createElement('a');
-                        link.href = downloadUrl;
+                        link.href = status.download_url;
+                        // For R2 presigned URLs, the filename is usually part of the generated URL response headers
+                        // But setting download attribute helps if same-origin (which it isn't here probably)
                         link.download = `exported_video_${videoId}.mp4`;
+                        link.target = "_blank"; // Open in new tab if download doesn't trigger automatically
                         document.body.appendChild(link);
                         link.click();
                         document.body.removeChild(link);

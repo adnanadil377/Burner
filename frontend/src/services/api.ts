@@ -308,7 +308,7 @@ export const api = {
   },
 
   // Check burn status
-  getBurnStatus: async (taskId: string): Promise<{ status: string; output_video?: string; download_endpoint?: string; error?: string }> => {
+  getBurnStatus: async (taskId: string): Promise<{ status: string; download_url?: string; error?: string }> => {
     const response = await authenticatedFetch(`${API_URL}/video/burn/${taskId}/status`, {
       method: 'GET',
     });

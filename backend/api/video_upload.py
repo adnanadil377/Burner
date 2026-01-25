@@ -10,8 +10,12 @@ from controller.video_upload_controller import (
     initiate_video_upload, 
     initiate_video_upload, 
     confirm_upload,
-    burn_video
+    burn_video,
+    get_s3_client,
+    R2_BUCKET_NAME,
+    PRESIGNED_URL_EXPIRATION
 )
+from botocore.exceptions import ClientError
 from celery.result import AsyncResult
 from core.celery_app import celery_app
 from fastapi.responses import FileResponse
@@ -235,31 +239,32 @@ def get_burn_status(task_id: str, user: Annotated[User, Depends(get_current_user
     elif task_result.state == 'FAILURE':
         return {"status": "FAILURE", "error": str(task_result.result)}
     elif task_result.state == 'SUCCESS':
-        # The task returns a dict with 'output_video' path relative to backend root (?)
-        # task_result.result is the return value of the function
+        # The task returns { "status": "success", "new_video_id": ..., "s3_key": ... }
         result = task_result.result
-        return {
-            "status": "SUCCESS", 
-            "output_video": result.get("output_video"),
-            "download_endpoint": f"/video/download-burned/{os.path.basename(result.get('output_video'))}" 
-        }
+        s3_key = result.get('s3_key')
+        
+        if not s3_key:
+             return {"status": "FAILURE", "error": "No S3 key returned"}
+             
+        # Generate Presigned Download URL
+        s3_client = get_s3_client()
+        try:
+            download_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': R2_BUCKET_NAME,
+                    'Key': s3_key
+                },
+                ExpiresIn=PRESIGNED_URL_EXPIRATION
+            )
+            return {
+                "status": "SUCCESS", 
+                "download_url": download_url
+            }
+        except ClientError as e:
+            logger.error(f"Failed to generate download URL for burned video: {e}")
+            return {"status": "SUCCESS", "error": "Could not generate download link"}
     
     return {"status": task_result.state}
 
-@router.get("/download-burned/{filename}")
-def download_burned_video(filename: str):
-    """Serve the burned video file."""
-    # Security: Ensure filename is just a filename, not a path
-    if "/" in filename or "\\" in filename or ".." in filename:
-         raise HTTPException(status_code=400, detail="Invalid filename")
-         
-    file_path = filename # Files are in root of backend currently
-    
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found or expired")
-        
-    return FileResponse(
-        file_path, 
-        media_type="video/mp4", 
-        filename=f"burned_{filename}"
-    )
+

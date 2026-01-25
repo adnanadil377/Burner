@@ -214,7 +214,32 @@ class VideoTextRenderer:
                 
                 # Basic Font setup
                 font = skia.Font(skia.Typeface(font_family), font_size)
+
+                # Text Wrapping Logic
+                max_width = self.width * 0.9 # Use 90% of screen width
+                text_width = font.measureText(text)
                 
+                lines = []
+                if text_width > max_width:
+                    # Simple word wrap
+                    words = text.split()
+                    current_line = []
+                    current_width = 0
+                    
+                    for word in words:
+                        word_width = font.measureText(word + " ")
+                        if current_width + word_width <= max_width:
+                            current_line.append(word)
+                            current_width += word_width
+                        else:
+                            lines.append(" ".join(current_line))
+                            current_line = [word]
+                            current_width = word_width
+                    if current_line:
+                        lines.append(" ".join(current_line))
+                else:
+                    lines = [text]
+
                 # Calculate simple animation opacity/scale if needed
                 # (Simple fade in/out for now)
                 progress = (current_time - start) / (end - start) if (end - start) > 0 else 0
@@ -226,53 +251,61 @@ class VideoTextRenderer:
                 elif progress > 0.9:
                     scale = (1.0 - progress) * 10
                 
-                # Text Width calculation for centering
-                text_width = font.measureText(text)
-                
                 # Coordinates (default bottom center)
-                x = (self.width - text_width) / 2
-                y = self.height * 0.9
+                y_base = self.height * 0.9
                 
                 # Override with position if provided
                 pos = style.get("position", {})
                 if pos:
-                    x = pos.get("x", 0.5) * self.width - (text_width / 2)
-                    y = pos.get("y", 0.9) * self.height
-
+                    y_base = pos.get("y", 0.9) * self.height
+                    
+                # Calculate total block height to center vertically around y_base? Or just stack up/down.
+                # Let's stack upwards from y_base
+                line_height = font_size * 1.2
+                total_height = len(lines) * line_height
+                
                 # Save canvas state for transformations
                 canvas.save()
                 
-                # Apply scaling around center of text
-                if scale != 1.0:
-                    center_x = x + text_width / 2
-                    center_y = y - font_size / 2 # Approx center
-                    canvas.translate(center_x, center_y)
-                    canvas.scale(scale, scale)
-                    canvas.translate(-center_x, -center_y)
+                # Iterate each line
+                for i, line in enumerate(reversed(lines)): # Draw from bottom up
+                     line_w = font.measureText(line)
+                     x = (self.width - line_w) / 2
+                     
+                     if pos:
+                         x = pos.get("x", 0.5) * self.width - (line_w / 2)
+                     
+                     y = y_base - (i * line_height)
 
-                # Shadow / Outline (Stroke)
-                paint = skia.Paint()
-                paint.setAntiAlias(True)
-                
-                # Parse Color
-                color_def = style.get("color", "#FFFFFF")
-                # Handle simple animation if color is a dict
-                if isinstance(color_def, dict):
-                     # Simple lerp or just pick start for now
-                     color_hex = color_def.get("start", "#FFFFFF")
-                else:
-                    color_hex = color_def
+                     # Apply scaling around center of text (Apply to block or line? Line for now)
+                     if scale != 1.0:
+                        center_x = x + line_w / 2
+                        center_y = y - font_size / 2 
+                        canvas.translate(center_x, center_y)
+                        canvas.scale(scale, scale)
+                        canvas.translate(-center_x, -center_y)
 
-                # Draw Outline first
-                paint.setStyle(skia.Paint.kStroke_Style)
-                paint.setStrokeWidth(4)
-                paint.setColor(skia.Color(0, 0, 0, 255)) # Black outline
-                canvas.drawString(text, x, y, font, paint)
-                
-                # Draw Fill
-                paint.setStyle(skia.Paint.kFill_Style)
-                paint.setColor(self.hex_to_color(color_hex))
-                canvas.drawString(text, x, y, font, paint)
+                     # Shadow / Outline (Stroke)
+                     paint = skia.Paint()
+                     paint.setAntiAlias(True)
+                     
+                     # Parse Color
+                     color_def = style.get("color", "#FFFFFF")
+                     if isinstance(color_def, dict):
+                         color_hex = color_def.get("start", "#FFFFFF")
+                     else:
+                        color_hex = color_def
+
+                     # Draw Outline first
+                     paint.setStyle(skia.Paint.kStroke_Style)
+                     paint.setStrokeWidth(4)
+                     paint.setColor(skia.Color(0, 0, 0, 255)) # Black outline
+                     canvas.drawString(line, x, y, font, paint)
+                     
+                     # Draw Fill
+                     paint.setStyle(skia.Paint.kFill_Style)
+                     paint.setColor(self.hex_to_color(color_hex))
+                     canvas.drawString(line, x, y, font, paint)
                 
                 # Restore
                 canvas.restore()
