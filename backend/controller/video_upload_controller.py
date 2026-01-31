@@ -123,6 +123,6 @@ def burn_video(
     output_filename = f"animated_subtitled_{uuid.uuid4()}.mp4"
     upload_info = initiate_video_upload(user, output_filename, db)
     upload_url = upload_info["upload_url"]
-    burn_animated_caption.delay(presigned_url,subtitles_json,style.model_dump(),output_filename,upload_url)
+    burn_animated_caption.delay(presigned_url,subtitles_json,style.model_dump(),output_filename,upload_info)
     
     

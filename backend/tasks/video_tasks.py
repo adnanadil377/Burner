@@ -187,50 +187,6 @@ def extract_audio_and_transcribe(presigned_url, video_id: int):
                 logger.warning(f"Failed to delete temporary audio file {audio_output}: {e}")
         db.close()
 
-# @celery_app.task
-# def burn_animated_caption(
-#     get_presigned_url, 
-#     subtitles_json:SubtitleListResponse, 
-#     style:Style,
-#     user:User,
-#     db:Session
-# ):
-#     """Burn animated subtitles into a video file using Skia.
-    
-#     Args:
-#         get_presigned_url: Presigned URL to download the video
-#         subtitles_json: List of style-enriched subtitles
-        
-#     Returns:
-#         dict: Task result with output video path
-#     """
-#     try:
-#         input_url = get_presigned_url
-#         output_filename = f"animated_subtitled_{uuid.uuid4()}.mp4"
-#         upload_url=initiate_video_upload(user, output_filename, db)
-#         # Initialize Renderer
-#         # Verify strict structure or loose structure? 
-#         # subtitles_json is expected to be a list of dicts.
-
-#         renderer = VideoTextRenderer(
-#             input_url=str(input_url),
-#             upload_url=str(upload_url.get("upload_url","")),
-#             style=style,
-#             subtitles=subtitles_json,
-#         )
-
-#         renderer.render(output_path="/tmp/output.mp4")
-
-#         return {
-#             "status": "completed",
-#             "original_video": str(input_url),
-#             "output_video": str(upload_url.get("upload_url","")),
-#         }
-
-#     except Exception as e:
-#         logger.error(f"Skia Rendering error: {str(e)}")
-#         raise
-    
 @celery_app.task(bind=True)
 def burn_animated_caption(
     self,
