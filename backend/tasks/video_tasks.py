@@ -2,6 +2,7 @@ import subprocess
 from typing import List
 import uuid
 import os
+import tempfile
 import logging
 import json
 
@@ -11,6 +12,10 @@ from google import genai
 from core.config import settings
 from db.session import SessionLocal
 from models.transcription import Transcription
+from utils.skia_renderer import VideoTextRenderer
+import boto3
+from botocore.config import Config
+from models.video import Video
 
 logger = logging.getLogger(__name__)
 api_key = settings.GEMINI_API_KEY
@@ -65,6 +70,102 @@ def burn_caption(get_presigned_url, subtitles):
 
     except subprocess.CalledProcessError as e:
         logger.error(f"FFmpeg error: {e.stderr or e.stdout or 'Unknown error'}")
+        raise e
+    finally:
+        if 'output_path' in locals() and os.path.exists(output_path):
+            os.remove(output_path)
+
+        raise e
+
+def get_s3_client():
+    return boto3.client(
+        service_name="s3",
+        endpoint_url=f'https://{settings.R2_ACCOUNT_ID}.r2.cloudflarestorage.com',
+        aws_access_key_id=settings.R2_ACCESS_KEY,
+        aws_secret_access_key=settings.R2_SECRET_KEY,
+        region_name="auto",
+        config=Config(signature_version="s3v4")
+    )
+
+@celery_app.task
+def burn_animated_caption(video_id, user_id, get_presigned_url, subtitles_json):
+    """Burn animated subtitles into a video file using Skia and upload to R2.
+    
+    Args:
+        video_id: Original video ID
+        user_id: User ownership
+        get_presigned_url: Presigned URL to download the video
+        subtitles_json: List of style-enriched subtitles
+        
+    Returns:
+        dict: Task result with new s3_key and video_id
+    """
+    """
+    try:
+        input_path = get_presigned_url
+        # Use system temp directory
+        temp_dir = tempfile.gettempdir()
+        output_filename = os.path.join(temp_dir, f"animated_subtitled_{uuid.uuid4().hex[:8]}.mp4")
+        
+        # 1. Render Video Locally
+        renderer = VideoTextRenderer(
+            input_path=str(input_path),
+            output_path=output_filename,
+            subtitles=subtitles_json
+        )
+        renderer.render()
+        
+        # 2. Upload to R2
+        s3_key = f"{user_id}/{output_filename}"
+        s3_client = get_s3_client()
+        
+        logger.info(f"Uploading {output_filename} to R2 as {s3_key}...")
+        s3_client.upload_file(
+            Filename=output_filename,
+            Bucket=settings.R2_BUCKET_NAME,
+            Key=s3_key,
+            ExtraArgs={'ContentType': 'video/mp4'}
+        )
+        
+        # 3. Create DB Record
+        db = SessionLocal()
+        try:
+             # Find original video to copy some metadata if needed, or just create new
+             original_video = db.query(Video).filter(Video.id == video_id).first()
+             original_name = f"burned_{original_video.original_name}" if original_video else output_filename
+
+             new_video = Video(
+                 user_id=user_id,
+                 s3_key=s3_key,
+                 bucket=settings.R2_BUCKET_NAME,
+                 original_name=original_name,
+                 status="COMPLETED"
+             )
+             db.add(new_video)
+             db.commit()
+             db.refresh(new_video)
+             new_video_id = new_video.id
+        except Exception as db_e:
+            logger.error(f"Database error saving burned video: {db_e}")
+            raise db_e
+        finally:
+            db.close()
+
+        if os.path.exists(output_filename):
+            os.remove(output_filename)
+        
+        return {
+            "status": "success",
+            "new_video_id": new_video_id,
+            "s3_key": s3_key,
+            "original_video_id": video_id
+        }
+
+    except Exception as e:
+        logger.error(f"Skia Rendering/Upload error: {str(e)}")
+        # Try cleanup
+        if 'output_filename' in locals() and os.path.exists(output_filename):
+            os.remove(output_filename)
         raise e
 
 class subtitle(BaseModel):

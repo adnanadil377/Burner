@@ -295,4 +295,26 @@ export const api = {
   restoreSession: async (): Promise<string> => {
     return refreshAccessToken();
   },
+
+  // Burn animated Video
+  burnVideo: async (videoId: number): Promise<{ message: string; task_id: string }> => {
+    const response = await authenticatedFetch(`${API_URL}/video/burn/${videoId}`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to start burn process');
+    }
+    return response.json();
+  },
+
+  // Check burn status
+  getBurnStatus: async (taskId: string): Promise<{ status: string; download_url?: string; error?: string }> => {
+    const response = await authenticatedFetch(`${API_URL}/video/burn/${taskId}/status`, {
+      method: 'GET',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch burn status');
+    }
+    return response.json();
+  }
 };

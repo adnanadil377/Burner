@@ -29,6 +29,7 @@ export default function EditorPage() {
     const [fileName, setFileName] = useState<string>('');
     const [pollingAttempts, setPollingAttempts] = useState(0);
     const [timeoutWarning, setTimeoutWarning] = useState(false);
+    const [exportLoading, setExportLoading] = useState(false);
     const maxPollingAttempts = 40; // Poll for up to 2 minutes (40 * 3 seconds)
     let pollingIntervalRef: NodeJS.Timeout | null = null;
 
@@ -202,6 +203,53 @@ export default function EditorPage() {
         }, 3000); // Poll every 3 seconds
     };
 
+    const handleExport = async () => {
+        if (!videoId) return;
+
+        try {
+            setExportLoading(true);
+            const { task_id } = await api.burnVideo(parseInt(videoId));
+
+            // Poll for burnout status
+            const burnPollInterval = setInterval(async () => {
+                try {
+                    const status = await api.getBurnStatus(task_id);
+
+                    if (status.status === 'SUCCESS' && status.download_url) {
+                        clearInterval(burnPollInterval);
+                        setExportLoading(false);
+
+                        // Trigger download using the presigned URL
+                        const link = document.createElement('a');
+                        link.href = status.download_url;
+                        // For R2 presigned URLs, the filename is usually part of the generated URL response headers
+                        // But setting download attribute helps if same-origin (which it isn't here probably)
+                        link.download = `exported_video_${videoId}.mp4`;
+                        link.target = "_blank"; // Open in new tab if download doesn't trigger automatically
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+
+                    } else if (status.status === 'FAILURE') {
+                        clearInterval(burnPollInterval);
+                        setExportLoading(false);
+                        setError('Export failed: ' + (status.error || 'Unknown error'));
+                    }
+                    // If PENDING, continue polling
+
+                } catch (err) {
+                    console.error("Polling error", err);
+                    // Don't stop polling immediately on network error, but maybe count errors?
+                }
+            }, 3000);
+
+        } catch (err) {
+            console.error('Error starting export:', err);
+            setExportLoading(false);
+            setError('Failed to start export process');
+        }
+    };
+
     const handleSubtitlesChange = async (updatedSubtitles: any) => {
         console.log('Subtitles updated:', updatedSubtitles);
         setSubtitles(updatedSubtitles);
@@ -255,6 +303,8 @@ export default function EditorPage() {
                     videoUrl={videoUrl}
                     subtitles={subtitles.length > 0 ? subtitles : MOCK_SUBTITLES}
                     onSubtitlesChange={handleSubtitlesChange}
+                    onExport={handleExport}
+                    exportLoading={exportLoading}
                 />
 
                 {/* Compact Status Badge */}

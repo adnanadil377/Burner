@@ -8,8 +8,22 @@ from controller.video_upload_controller import (
     call_celery_audio,
     create_presigned_download_url, 
     initiate_video_upload, 
-    confirm_upload
+    initiate_video_upload, 
+    confirm_upload,
+    burn_video,
+    get_s3_client,
+    R2_BUCKET_NAME,
+    PRESIGNED_URL_EXPIRATION
 )
+from botocore.exceptions import ClientError
+from celery.result import AsyncResult
+from core.celery_app import celery_app
+from fastapi.responses import FileResponse
+import os
+from celery.result import AsyncResult
+from core.celery_app import celery_app
+from fastapi.responses import FileResponse
+import os
 from models.user import User
 from dependency import get_current_user
 from sqlalchemy.orm import Session
@@ -205,3 +219,52 @@ def regenerate_transcription(
     
     # Trigger new transcription task
     return call_celery_audio(user, video.s3_key, video_id, db)
+
+@router.post("/burn/{video_id}")
+def burn_captions(
+    video_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """Start the process of burning animated captions into the video."""
+    return burn_video(user, video_id, db)
+
+@router.get("/burn/{task_id}/status")
+def get_burn_status(task_id: str, user: Annotated[User, Depends(get_current_user)]):
+    """Check the status of the burning task."""
+    task_result = AsyncResult(task_id, app=celery_app)
+    
+    if task_result.state == 'PENDING':
+        return {"status": "PENDING"}
+    elif task_result.state == 'FAILURE':
+        return {"status": "FAILURE", "error": str(task_result.result)}
+    elif task_result.state == 'SUCCESS':
+        # The task returns { "status": "success", "new_video_id": ..., "s3_key": ... }
+        result = task_result.result
+        s3_key = result.get('s3_key')
+        
+        if not s3_key:
+             return {"status": "FAILURE", "error": "No S3 key returned"}
+             
+        # Generate Presigned Download URL
+        s3_client = get_s3_client()
+        try:
+            download_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': R2_BUCKET_NAME,
+                    'Key': s3_key
+                },
+                ExpiresIn=PRESIGNED_URL_EXPIRATION
+            )
+            return {
+                "status": "SUCCESS", 
+                "download_url": download_url
+            }
+        except ClientError as e:
+            logger.error(f"Failed to generate download URL for burned video: {e}")
+            return {"status": "SUCCESS", "error": "Could not generate download link"}
+    
+    return {"status": task_result.state}
+
+
