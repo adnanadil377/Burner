@@ -6,6 +6,14 @@ A project to customize and add burnt subtitles to your short-form content. New f
 
 Burner is a full-stack application that allows you to enhance your short-form videos with customizable burnt-in subtitles. The application consists of a React + TypeScript frontend and a FastAPI backend, providing a seamless experience for subtitle customization and video processing.
 
+## Business Logic
+
+Burner addresses the growing need for engaging short-form video content on platforms like TikTok, Instagram Reels, and YouTube Shorts. The core business logic revolves around:
+
+- **Automated Subtitle Generation & Customization**: Enhancing videos with highly customizable burnt-in subtitles to maximize viewer retention and accessibility.
+- **Video Processing Pipeline**: Seamlessly handling video uploads, extracting audio, processing transcripts, and rendering the final video with hardcoded (burnt) subtitles.
+- **Scalable Architecture**: Utilizing a FastAPI backend for efficient handling of resource-intensive video processing tasks, combined with a responsive React frontend for an intuitive user experience.
+
 ## Tech Stack
 
 ### Frontend
@@ -21,6 +29,9 @@ Burner is a full-stack application that allows you to enhance your short-form vi
 - Uvicorn
 - Python Jose (JWT authentication)
 - Passlib (password hashing)
+
+<details>
+<summary><b>Local Setup Guide (Click to Expand)</b></summary>
 
 ## Prerequisites
 
@@ -91,6 +102,8 @@ npm run dev
 ```
 
 The frontend application will be available at `http://localhost:5173` (default Vite port)
+
+</details>
 
 ## Development
 

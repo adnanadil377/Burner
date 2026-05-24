@@ -13,6 +13,9 @@ export default {
         muted: '#B4B7C0',
         lash: {
           900: '#111022',
+          800: '#1A1A28',
+          700: '#222232',
+          600: '#2A2A3C',
         },
       },
       fontFamily: {

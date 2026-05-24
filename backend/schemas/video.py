@@ -1,19 +1,5 @@
 from pydantic import BaseModel
-
-class VideoBase(BaseModel):
-    user_id: int
-    s3_key: str
-    bucket: str
-    original_name: str
-    status: str
-
-class VideoCreate(VideoBase):
-    status: str = "PENDING"
-
-class VideoResponse(VideoBase):
-    id: int
-    class Config:
-        from_attributes = True
+from typing import Optional
 
 class PresignedUploadResponse(BaseModel):
     upload_url: str
@@ -23,6 +9,11 @@ class PresignedUploadResponse(BaseModel):
 class DownloadUrlResponse(BaseModel):
     download_url: str
 
+class VideoSchema(BaseModel):
+    id: int
+    status: str
+    original_name: str
+
 class VideoCompletionResponse(BaseModel):
     message: str
-    video: VideoResponse
+    video: VideoSchema
