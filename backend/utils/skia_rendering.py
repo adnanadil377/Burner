@@ -196,18 +196,11 @@ class VideoTextRenderer:
 
     def draw_subtitles(self, canvas, current_time, style: dict):
         """Draw active subtitles on the canvas with progressive highlighting."""
-        font_size = style.get("font_size")
-        font_family = style.get("font_family")
-        font_weight = style.get("font_weight")
-        font_color = style.get("font_color")
-        font_position = style.get("font_position")
+        global_font_size = style.get("font_size")
+        global_font_family = style.get("font_family")
+        global_font_color = style.get("font_color")
+        global_position = style.get("font_position")
         
-        # 1. Setup basic Font
-        font = skia.Font(skia.Typeface(font_family), font_size)
-        
-        # Get width of a space for manual layout
-        space_width = font.measureText(" ")
-
         for sub in self.subtitles:
             start = sub.get("start", 0)
             end = sub.get("end", 0)
@@ -215,6 +208,40 @@ class VideoTextRenderer:
             if start <= current_time <= end:
                 text = sub.get("text", "")
                 
+                # --- APPLY LOCAL STYLE IF AVAILABLE ---
+                local_style = sub.get("style", {})
+                if local_style:
+                     font_size = local_style.get("font_size", global_font_size)
+                     font_family = local_style.get("font_family", global_font_family)
+                     font_color = local_style.get("font_color", global_font_color)
+                     font_style = local_style.get("font_style", "normal") # glow, neon, pop
+                     font_position = local_style.get("position", global_position)
+                else:
+                     font_size = global_font_size
+                     font_family = global_font_family
+                     font_color = global_font_color
+                     font_style = "normal"
+                     font_position = global_position
+                
+                # --- ANIMATION CALCULATIONS ---
+                scale = 1.0
+                if "pop" in font_style.lower():
+                    # Simple pop animation: scale up at start of segment
+                    elapsed = current_time - start
+                    if elapsed < 0.2:
+                         scale = 1.0 + (0.5 * (1 - (elapsed/0.2))) # Pop from 1.5x down to 1.0
+                
+                # 1. Setup basic Font
+                try:
+                    typeface = skia.Typeface(font_family)
+                except:
+                    typeface = skia.Typeface("Arial") # Fallback
+                
+                font = skia.Font(typeface, font_size * scale)
+                
+                # Get width of a space for manual layout
+                space_width = font.measureText(" ")
+
                 # --- PRE-CALCULATION ---
                 
                 # Split text into words to handle them individually
@@ -239,9 +266,19 @@ class VideoTextRenderer:
                 y = self.height * 0.9
 
                 # Override with user position if provided
-                if font_position:
-                    start_x = font_position.get("x") * self.width - (total_text_width / 2)
-                    y = font_position.get("y") * self.height
+                if font_position and isinstance(font_position, dict):
+                    # Handle both integer coordinates and relative positions if needed
+                    # Assuming font_position might be relative (0-1) or absolute? 
+                    # The prompt says {[int,int]}, let's assume absolute or we can adapt.
+                    # For safety, if values are small (<1), treat as relative.
+                    pos_x = font_position.get("x", 0)
+                    pos_y = font_position.get("y", 0)
+                    
+                    if pos_x <= 1 and pos_x > 0: start_x = pos_x * self.width - (total_text_width/2)
+                    elif pos_x > 1: start_x = pos_x
+                    
+                    if pos_y <= 1 and pos_y > 0: y = pos_y * self.height
+                    elif pos_y > 1: y = pos_y
 
                 # --- DRAWING LOOP ---
 
@@ -252,21 +289,24 @@ class VideoTextRenderer:
                 paint_stroke = skia.Paint()
                 paint_stroke.setAntiAlias(True)
                 paint_stroke.setStyle(skia.Paint.kStroke_Style)
-                paint_stroke.setStrokeWidth(2) # Adjust thickness as needed
+                paint_stroke.setStrokeWidth(3) # Thicker outline for viral look
                 paint_stroke.setColor(skia.Color(0, 0, 0, 255)) # Black outline
 
                 # Active Fill Paint (The Highlight Color)
                 paint_active = skia.Paint()
                 paint_active.setAntiAlias(True)
                 paint_active.setStyle(skia.Paint.kFill_Style)
-                paint_active.setColor(self.hex_to_color(font_color)) # User's chosen color
+                paint_active.setColor(self.hex_to_color(font_color)) 
+                
+                # GLOW EFFECT
+                if "glow" in font_style.lower() or "neon" in font_style.lower():
+                    paint_active.setImageFilter(skia.ImageFilters.DropShadow(0, 0, 5, 5, self.hex_to_color(font_color)))
 
                 # Inactive Fill Paint (The Unspoken Color)
-                # We use a semi-transparent white or gray for the "future" words
                 paint_inactive = skia.Paint()
                 paint_inactive.setAntiAlias(True)
                 paint_inactive.setStyle(skia.Paint.kFill_Style)
-                paint_inactive.setColor(skia.Color(200, 200, 200, 180)) # Light Grey
+                paint_inactive.setColor(skia.Color(230, 230, 230, 200)) # Lighter white/grey
 
                 current_x = start_x
                 total_chars = len(text)
@@ -277,7 +317,6 @@ class VideoTextRenderer:
 
                     # --- LOGIC: Is this word highlighted? ---
                     # We estimate word timing based on character count ratio.
-                    # Start threshold: When the previous words finished
                     word_start_ratio = chars_processed / total_chars
                     
                     # Determine which paint to use
@@ -285,12 +324,19 @@ class VideoTextRenderer:
                         paint_fill = paint_active
                     else:
                         paint_fill = paint_inactive
+                        
+                    # SHAKE ANIMATION
+                    draw_x, draw_y = current_x, y
+                    if "shake" in font_style.lower() and progress >= word_start_ratio and progress <= word_start_ratio + 0.1:
+                         # Shake only when currently being spoken
+                         draw_x += np.random.randint(-2, 3)
+                         draw_y += np.random.randint(-2, 3)
 
                     # Draw Outline
-                    canvas.drawString(word, current_x, y, font, paint_stroke)
+                    canvas.drawString(word, draw_x, draw_y, font, paint_stroke)
                     
                     # Draw Fill
-                    canvas.drawString(word, current_x, y, font, paint_fill)
+                    canvas.drawString(word, draw_x, draw_y, font, paint_fill)
 
                     # Advance cursor: move X to the right for the next word
                     current_x += word_width + space_width

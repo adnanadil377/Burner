@@ -13,7 +13,7 @@ from utils.s3_initial import initiate_video_upload
 from models.user import User
 from utils.skia_rendering import VideoTextRenderer
 from schemas.burn import Style
-from schemas.transcription import SubtitleListResponse
+from schemas.transcription import SubtitleListResponse, SubtitlesResponse
 from core.celery_app import celery_app
 from google import genai
 from core.config import settings
@@ -88,41 +88,74 @@ def extract_audio_and_transcribe(presigned_url, video_id: int):
         dict: Transcription result with video_id and subtitle count
     """
     unique_id = uuid.uuid4()
-    audio_output = f"{unique_id}.mp3"
+    # We now download the VIDEO itself to a temp file
+    video_output = f"{unique_id}.mp4" 
     db = SessionLocal()
 
     try:
-        # Extract audio from video
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-i", presigned_url,  # Input is the URL
-            "-vn",                # Disable video
-            "-acodec", "libmp3lame",
-            "-q:a", "4",
-            audio_output          # Output file path
-        ]
+        # 1. Download Video File
+        logger.info(f"Downloading video from {presigned_url} to {video_output}")
+        from requests import get 
+        with open(video_output, "wb") as f:
+            response = get(presigned_url, stream=True)
+            for chunk in response.iter_content(chunk_size=8192):
+                 f.write(chunk)
         
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        logger.info("Video download complete. Uploading to Gemini...")
 
-        # Upload to Gemini and generate transcript
+        # 2. Upload to Gemini (Video)
         client = genai.Client(api_key=api_key)
-        audio_file = client.files.upload(file=audio_output)
+        video_file = client.files.upload(file=video_output)
         
-        # Generate Transcript with word limit per subtitle
-        prompt = 'Generate a transcript of the speech with precise timestamps.If not in english generate transcript with english letters always. NO TRANSLATION'
+        # 3. Wait for video processing (Crucial for Gemini Video)
+        import time
+        while video_file.state.name == "PROCESSING":
+            time.sleep(2)
+            video_file = client.files.get(name=video_file.name)
+            
+        if video_file.state.name == "FAILED":
+             raise ValueError("Gemini failed to process video file.")
+
+        logger.info("Gemini video processing complete. Generating subtitles...")
+
+        # 4. Generate Transcript with Context-Aware Prompts
+        prompt = '''
+        Analyze the audio and visuals of the video to generate a transcript with precise timestamps.
+        
+        For EACH subtitle segment, allow the visual context to drive the style:
+        
+        1.  **Placement (position)**: 
+            - Look at the frame. Ensure text DOES NOT cover faces, important objects, or existing text.
+            - Return x, y coordinates as floats between 0.0 and 1.0. (e.g., x=0.5 is center, y=0.9 is bottom).
+            - Default to bottom center (x=0.5, y=0.9), but move to top (y=0.1) or side if the bottom is busy.
+            
+        2.  **Style**:
+            - **Colors**: Pick colors that contrast well with the background of that specific scene.
+            - **Fonts/Effects**:
+                - "glow": For emotional or high-contrast moments.
+                - "pop": For sudden loud noises or exciting words.
+                - "shake": For chaotic scenes or angry speech.
+                - "karaoke": (Optional) if it fits a music segment.
+                
+        3.  **Content**:
+            - Transcribe spoken words matching the schema.
+            - If not English, transliterate to English alphabet.
+
+        Return valid JSON matching the schema.
+        '''
+        
         response = client.models.generate_content(
             model=settings.GEMINI_MODEL,  # Configurable Gemini model
-            contents=[prompt, audio_file],
+            contents=[prompt, video_file],
             config={
                 "response_mime_type": "application/json",
-                "response_json_schema": SubtitleListResponse.model_json_schema(),
+                "response_json_schema": SubtitlesResponse.model_json_schema(),
             },
         )
 
         # Parse the response JSON
         transcription_data = json.loads(response.text)
-        subtitles_raw = transcription_data.get("subtitle", [])
+        subtitles_raw = transcription_data.get("Subtitle", [])
         
         # Format subtitles to match the desired structure
         formatted_subtitles = []
@@ -131,16 +164,24 @@ def extract_audio_and_transcribe(presigned_url, video_id: int):
                 "id": f"sub-{idx}",
                 "start": round(sub["start"], 2),
                 "end": round(sub["end"], 2),
-                "text": sub["text"]
+                "text": sub["text"],
+                "style": sub.get("style")
             })
         
-        # Save to database
-        transcription = Transcription(
-            video_id=video_id,
-            subtitles=formatted_subtitles,
-            status="COMPLETED"
-        )
-        db.add(transcription)
+        # Save to database (Upsert logic)
+        existing_transcription = db.query(Transcription).filter(Transcription.video_id == video_id).first()
+        if existing_transcription:
+            existing_transcription.subtitles = formatted_subtitles
+            existing_transcription.status = "COMPLETED"
+            transcription = existing_transcription
+        else:
+            transcription = Transcription(
+                video_id=video_id,
+                subtitles=formatted_subtitles,
+                status="COMPLETED"
+            )
+            db.add(transcription)
+            
         db.commit()
         db.refresh(transcription)
         
@@ -157,34 +198,44 @@ def extract_audio_and_transcribe(presigned_url, video_id: int):
         logger.error(f"FFmpeg error during audio extraction: {e.stderr or e.stdout or 'Unknown error'}")
         # Save failed status to database
         if video_id:
-            transcription = Transcription(
-                video_id=video_id,
-                subtitles=[],
-                status="FAILED"
-            )
-            db.add(transcription)
+            existing_transcription = db.query(Transcription).filter(Transcription.video_id == video_id).first()
+            if existing_transcription:
+                existing_transcription.status = "FAILED"
+                existing_transcription.subtitles = []
+            else:
+                transcription = Transcription(
+                    video_id=video_id,
+                    subtitles=[],
+                    status="FAILED"
+                )
+                db.add(transcription)
             db.commit()
         raise e
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
         # Save failed status to database
         if video_id:
-            transcription = Transcription(
-                video_id=video_id,
-                subtitles=[],
-                status="FAILED"
-            )
-            db.add(transcription)
+            existing_transcription = db.query(Transcription).filter(Transcription.video_id == video_id).first()
+            if existing_transcription:
+                existing_transcription.status = "FAILED"
+                existing_transcription.subtitles = []
+            else:
+                transcription = Transcription(
+                    video_id=video_id,
+                    subtitles=[],
+                    status="FAILED"
+                )
+                db.add(transcription)
             db.commit()
         raise e
     finally:
         # Cleanup: Always delete the local file to save disk space
-        if os.path.exists(audio_output):
+        if os.path.exists(video_output):
             try:
-                os.remove(audio_output)
-                logger.info(f"Cleaned up temporary audio file: {audio_output}")
+                os.remove(video_output)
+                logger.info(f"Cleaned up temporary video file: {video_output}")
             except OSError as e:
-                logger.warning(f"Failed to delete temporary audio file {audio_output}: {e}")
+                logger.warning(f"Failed to delete temporary video file {video_output}: {e}")
         db.close()
 
 @celery_app.task(bind=True)
